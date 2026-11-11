@@ -1,0 +1,431 @@
+<!-- ============ MODULO ACTIVO FIJO ============ -->
+<!-- Usa los estilos comunes de pantalla que define el módulo Ventas (y .kpis.s8 / .etq de Stock); acá solo van los propios. -->
+<style>
+  .a-aviso { font-size:12px; color:var(--amber); margin:0 0 12px; line-height:1.5; }
+  .a-nota { font-size:12px; color:var(--gray); margin:0 0 12px; line-height:1.5; }
+  .a-barra { position:relative; height:6px; border-radius:3px; background:rgba(255,255,255,.08); min-width:70px; margin-top:4px; }
+  .a-barra span { position:absolute; left:0; top:0; bottom:0; border-radius:3px; background:#d95926; }
+  td.a-falta { color:var(--amber); }
+  .a-sel { background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--off-white); border-radius:6px; padding:4px 6px; font-size:12px; margin-left:6px; }
+</style>
+
+<section class="modulo" id="modActivoFijo">
+  <div class="filtros">
+    <div class="fila-filtros">
+      <div class="filtro"><label for="afPeriodo">Período (movimientos)</label><select id="afPeriodo"></select></div>
+      <div class="filtro"><label for="afDesde">Desde</label><input type="date" id="afDesde"></div>
+      <div class="filtro"><label for="afHasta">Hasta</label><input type="date" id="afHasta"></div>
+      <div class="filtro"><label for="afTipoBien">Tipo de bien</label><select id="afTipoBien"></select></div>
+      <div class="filtro"><label for="afDepto">Departamento</label><select id="afDepto"></select></div>
+      <div class="filtro"><label for="afUbic">Ubicación</label><select id="afUbic"></select></div>
+      <div class="filtro"><label for="afSituacion">Situación</label>
+        <select id="afSituacion"><option value="">Todos</option><option value="casi">Amortizados 90 % o más</option><option value="vigente">Con valor residual</option><option value="baja">Dados de baja</option></select></div>
+      <div class="filtro"><label for="afBien">Bien</label><select id="afBien"></select></div>
+      <div class="filtro"><label for="afTipoMov">Tipo de movimiento</label><select id="afTipoMov"></select></div>
+      <div class="filtro ancho"><label for="afTexto">Buscar</label><input type="text" id="afTexto" placeholder="Código, bien, tipo, departamento…"></div>
+    </div>
+    <div class="chips" id="aChips"></div>
+  </div>
+
+  <div id="aMensaje" class="mensaje oculto"></div>
+  <div id="aCuerpo">
+    <div class="a-nota">Saldos de hoy según Tango (valoración contable). Valor residual = valor de origen + mejoras + revalúos − amortización acumulada. El período filtra los movimientos (amortizaciones, altas, mejoras); los saldos son siempre a hoy.</div>
+    <div class="a-aviso" id="aAviso"></div>
+    <div class="kpis s8" id="aKpis"></div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Amortización e incorporaciones <span class="sub" id="aSubPer"></span></span>
+          <span class="tabs" id="aTabsPer"><button data-p="anio" class="on">Por año</button><button data-p="mes">Por mes</button></span></h3>
+        <div class="lienzo"><canvas id="aChPer" aria-label="Amortización por período"></canvas></div>
+        <div class="ayuda">Incorporaciones = altas, mejoras y revalúos. Clic en una barra: filtra ese período.</div>
+      </div>
+      <div class="panel">
+        <h3><span>Amortizado y residual</span>
+          <span class="tabs" id="aTabsGr"><button data-g="bien" class="on">Bienes</button><button data-g="tipo_bien">Tipos</button><button data-g="departamento">Departamentos</button><button data-g="ubicacion">Ubicaciones</button></span></h3>
+        <div class="lienzo alto"><canvas id="aChGr" aria-label="Amortizado y valor residual"></canvas></div>
+        <div class="ayuda">Naranja: amortizado. Verde: valor residual. Clic en una barra: filtra.</div>
+      </div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3>Amortización por año y bien <span class="sub">control: un hueco en un bien con vida útil es un mes o año sin amortizar</span></h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr id="aCabMatriz"></tr></thead>
+          <tbody id="aTablaMatriz"></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h3>Por tipo de movimiento <span class="sub">en el período</span></h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Tipo</th><th class="num">Comprob.</th><th class="num">Incorporado</th><th class="num">Amortizado</th></tr></thead>
+          <tbody id="aTablaTipo"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><span>Detalle <span class="sub" id="aSubDet"></span></span>
+        <span><span class="tabs" id="aTabsDet"><button data-v="bien" class="on">Bienes</button><button data-v="mov">Movimientos</button></span>
+        <button class="btn secundario chico" id="aBtnCsv">Descargar CSV</button></span></h3>
+      <div class="tabla-scroll"><table>
+        <thead><tr id="aCabDet"></tr></thead>
+        <tbody id="aTablaDet"></tbody></table></div>
+      <div class="pie-tabla"><span id="aPagInfo"></span>
+        <span><button class="btn secundario chico" id="aPagAnt">‹ Anterior</button> <button class="btn secundario chico" id="aPagSig">Siguiente ›</button></span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Lógica pura. bienes = api_activo_bienes_v2; movs = api_activo_movimientos_v2.
+  // ---------------------------------------------------------------------------
+  var A = window.ActivoLogica = {};
+  function r2(x) { return Math.round(x * 100) / 100; }
+  A.SIN = 'Sin dato';
+  A.DEP = 'DEPRECIA';
+  A.val = function (x) { return x == null || x === '' ? A.SIN : x; };
+  A.indice = function (bienes) { var m = {}; bienes.forEach(function (b) { m[b.id_bien] = b; }); return m; };
+
+  A.bienPasa = function (b, f) {
+    if (!b) return !(f.tipoBien || f.depto || f.ubic || f.situacion || f.bien || f.texto);
+    if (f.bien && String(b.id_bien) !== String(f.bien)) return false;
+    if (f.tipoBien && A.val(b.tipo_bien) !== f.tipoBien) return false;
+    if (f.depto && A.val(b.departamento) !== f.depto) return false;
+    if (f.ubic && A.val(b.ubicacion) !== f.ubic) return false;
+    if (f.situacion === 'casi' && !(+b.porc_amortizado >= 90)) return false;
+    if (f.situacion === 'vigente' && !(+b.valor_residual > 0 && !b.fecha_baja)) return false;
+    if (f.situacion === 'baja' && !b.fecha_baja) return false;
+    var txt = (f.texto || '').trim().toLowerCase();
+    if (txt && [b.cod_bien, b.bien, b.detalle, b.tipo_bien, b.departamento, b.ubicacion, b.responsable].join(' ').toLowerCase().indexOf(txt) < 0) return false;
+    return true;
+  };
+
+  A.filtrarMovs = function (movs, idx, f) {
+    return movs.filter(function (m) {
+      if (f.desde && m.fecha < f.desde) return false;
+      if (f.hasta && m.fecha > f.hasta) return false;
+      if (f.tipoMov && m.cod_tipo !== f.tipoMov) return false;
+      return A.bienPasa(idx[m.id_bien], f);
+    });
+  };
+
+  A.kpis = function (bienes, movs, f) {
+    var k = { n: 0, origen: 0, mejoras: 0, revaluos: 0, total: 0, amort: 0, residual: 0, casi: 0, ultima: null, primera_ult: null, amort_periodo: 0, incorporado: 0 };
+    bienes.forEach(function (b) {
+      if (!A.bienPasa(b, f)) return;
+      k.n++; k.origen += +b.valor_origen; k.mejoras += +b.valor_mejora; k.revaluos += +b.valor_revaluo; k.total += +b.valor_total;
+      k.amort += +b.amort_acumulada; k.residual += +b.valor_residual; if (+b.porc_amortizado >= 90) k.casi++;
+      if (b.ultima_amortizacion && (!k.ultima || b.ultima_amortizacion > k.ultima)) k.ultima = b.ultima_amortizacion;
+    });
+    movs.forEach(function (m) { if (m.cod_tipo === A.DEP) k.amort_periodo += +m.amortizacion; k.incorporado += +m.valor_origen + +m.valor_mejora + +m.valor_revaluo; });
+    ['origen', 'mejoras', 'revaluos', 'total', 'amort', 'residual', 'amort_periodo', 'incorporado'].forEach(function (x) { k[x] = r2(k[x]); });
+    k.pct = k.total ? r2(k.amort / k.total * 100) : null;
+    return k;
+  };
+
+  // por: 'anio' | 'mes'. Amortización (solo comprobantes de depreciación) e incorporaciones (origen + mejoras + revalúos).
+  A.porPeriodo = function (movs, por) {
+    var g = {};
+    movs.forEach(function (m) {
+      var k = por === 'mes' ? m.fecha.slice(0, 7) : m.fecha.slice(0, 4);
+      if (!g[k]) g[k] = { clave: k, amortizacion: 0, incorporado: 0 };
+      if (m.cod_tipo === A.DEP) g[k].amortizacion += +m.amortizacion;
+      g[k].incorporado += +m.valor_origen + +m.valor_mejora + +m.valor_revaluo;
+    });
+    return Object.keys(g).sort().map(function (k) { g[k].amortizacion = r2(g[k].amortizacion); g[k].incorporado = r2(g[k].incorporado); return g[k]; });
+  };
+
+  // dim: bien | tipo_bien | departamento | ubicacion. Saldos de hoy.
+  A.porGrupo = function (bienes, f, dim) {
+    var g = {};
+    bienes.forEach(function (b) {
+      if (!A.bienPasa(b, f)) return;
+      var k = dim === 'bien' ? String(b.id_bien) : A.val(b[dim]), nom = dim === 'bien' ? b.bien : k;
+      if (!g[k]) g[k] = { clave: k, nombre: nom, amortizado: 0, residual: 0, total: 0 };
+      g[k].amortizado += +b.amort_acumulada; g[k].residual += +b.valor_residual; g[k].total += +b.valor_total;
+    });
+    return Object.keys(g).map(function (k) { var x = g[k]; x.amortizado = r2(x.amortizado); x.residual = r2(x.residual); x.total = r2(x.total); return x; })
+      .sort(function (a, b) { return b.total - a.total; });
+  };
+
+  A.porTipoMov = function (movs) {
+    var g = {};
+    movs.forEach(function (m) {
+      var k = m.cod_tipo; if (!g[k]) g[k] = { clave: k, nombre: m.tipo, c: {}, comprobantes: 0, incorporado: 0, amortizado: 0 };
+      g[k].c[m.id_comprobante] = 1; g[k].incorporado += +m.valor_origen + +m.valor_mejora + +m.valor_revaluo; g[k].amortizado += +m.amortizacion + +m.amortizacion_inicial;
+    });
+    return Object.keys(g).map(function (k) { var x = g[k]; x.comprobantes = Object.keys(x.c).length; delete x.c; x.incorporado = r2(x.incorporado); x.amortizado = r2(x.amortizado); return x; })
+      .sort(function (a, b) { return b.comprobantes - a.comprobantes; });
+  };
+
+  // Matriz año x bien de la amortización (comprobantes de depreciación). anios: lista de años a mostrar.
+  A.matriz = function (movs, bienes, anios) {
+    var m = {};
+    movs.forEach(function (x) { if (x.cod_tipo !== A.DEP) return; var a = x.fecha.slice(0, 4); m[a] = m[a] || {}; m[a][x.id_bien] = (m[a][x.id_bien] || 0) + +x.amortizacion; });
+    return anios.map(function (a) {
+      var fila = { anio: a, total: 0, celdas: {} };
+      bienes.forEach(function (b) { var v = m[a] && m[a][b.id_bien] ? r2(m[a][b.id_bien]) : 0; fila.celdas[b.id_bien] = v; fila.total += v; });
+      fila.total = r2(fila.total); return fila;
+    });
+  };
+
+  // ¿Le faltaba amortizar ese año? Vida útil vigente durante el año, residual > 0 al final y sin amortización ese año.
+  A.falta = function (b, anio, valor) {
+    if (valor || !b.fecha_activacion || !b.vida_util_meses) return false;
+    var ini = b.fecha_activacion.slice(0, 4), finVida = new Date(+b.fecha_activacion.slice(0, 4), +b.fecha_activacion.slice(5, 7) - 2 + b.vida_util_meses, 1).getFullYear(); // último mes de vida útil
+    return anio >= ini && anio <= String(finVida) && +b.valor_residual > 0 && !b.fecha_baja;
+  };
+
+  if (typeof window.document === 'undefined') return;
+
+  // ---------------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------------
+  var BIE = null, MOV = null, IDX = {}, F = {}, graf = {}, por = 'anio', dim = 'bien', vista = 'bien', MIN = null, MAX = null;
+  var orden = { col: 'valor_total', dir: -1 }, pagina = 0, POR_PAG = 25;
+  var COL = { azul: '#3987e5', naranja: '#d95926', aqua: '#199e70', grilla: 'rgba(255,255,255,0.07)', texto: '#7C93A3', claro: '#F2F5F3' };
+  var fmt$ = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+  var fmt$2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 });
+  var fmtN = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  var fmtD = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
+  function g$(x) { return x == null ? '—' : fmt$.format(x); }
+  function el(id) { return document.getElementById(id); }
+  function fechaTxt(s) { if (!s) return '—'; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function mesTxt(k) { var n = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return n[+k.slice(5, 7) - 1] + ' ' + k.slice(2, 4); }
+  function nuevo(tag, clase, texto) { var e = document.createElement(tag); if (clase) e.className = clase; if (texto != null) e.textContent = texto; return e; }
+  function compacto(v) { var a = Math.abs(v); if (a >= 1e6) return fmtD.format(v / 1e6) + ' M'; if (a >= 1e3) return fmtN.format(v / 1e3) + ' mil'; return fmtN.format(v); }
+
+  window.MODULOS = window.MODULOS || {};
+  window.MODULOS.ActivoFijo = { titulo: 'Activo Fijo', cargar: cargar };
+
+  function cargar() {
+    if (BIE) { dibujar(); return; }
+    el('aCuerpo').classList.add('cargando-suave');
+    Promise.all([sb.rpc('api_activo_bienes_v2'), sb.rpc('api_activo_movimientos_v2', {})]).then(function (rs) {
+      el('aCuerpo').classList.remove('cargando-suave');
+      var err = rs.map(function (r) { return r.error; }).filter(Boolean)[0];
+      if (err) { aviso('aMensaje', 'No se pudo leer activo fijo: ' + textoError(err)); return; }
+      BIE = (rs[0].data || []).map(function (b) { ['fecha_alta', 'fecha_activacion', 'fecha_baja', 'ultima_amortizacion'].forEach(function (k) { if (b[k]) b[k] = String(b[k]).slice(0, 10); }); return b; });
+      MOV = (rs[1].data || []).map(function (m) { m.fecha = String(m.fecha).slice(0, 10); return m; });
+      IDX = A.indice(BIE);
+      armarFiltros(); dibujar();
+    }).catch(function (e) { el('aCuerpo').classList.remove('cargando-suave'); aviso('aMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  var IDS = { desde: 'afDesde', hasta: 'afHasta', tipoBien: 'afTipoBien', depto: 'afDepto', ubic: 'afUbic', situacion: 'afSituacion', bien: 'afBien', tipoMov: 'afTipoMov', texto: 'afTexto' };
+  function opciones(sel, pares, todos) { sel.innerHTML = ''; sel.appendChild(new Option(todos, '')); pares.forEach(function (p) { sel.appendChild(new Option(p[1], p[0])); }); }
+  function distintos(campo) { var m = {}; BIE.forEach(function (b) { m[A.val(b[campo])] = 1; }); return Object.keys(m).sort().map(function (x) { return [x, x]; }); }
+
+  function armarFiltros() {
+    var fechas = MOV.map(function (m) { return m.fecha; }).sort(); MIN = fechas[0]; MAX = fechas[fechas.length - 1];
+    el('afDesde').min = el('afHasta').min = MIN; el('afDesde').max = el('afHasta').max = MAX;
+    var anios = {}; fechas.forEach(function (f) { anios[f.slice(0, 4)] = 1; });
+    var per = [['todo', 'Todo (' + fechaTxt(MIN) + ' al ' + fechaTxt(MAX) + ')']];
+    Object.keys(anios).sort().reverse().forEach(function (a) { per.push(['a' + a, 'Año ' + a]); }); per.push(['custom', 'Personalizado']);
+    var sp = el('afPeriodo'); sp.innerHTML = ''; per.forEach(function (p) { sp.appendChild(new Option(p[1], p[0])); });
+    opciones(el('afTipoBien'), distintos('tipo_bien'), 'Todos');
+    opciones(el('afDepto'), distintos('departamento'), 'Todos');
+    opciones(el('afUbic'), distintos('ubicacion'), 'Todas');
+    opciones(el('afBien'), BIE.map(function (b) { return [String(b.id_bien), b.bien + ' (' + b.cod_bien + ')']; }), 'Todos');
+    var tipos = {}; MOV.forEach(function (m) { tipos[m.cod_tipo] = m.tipo; });
+    opciones(el('afTipoMov'), Object.keys(tipos).sort().map(function (k) { return [k, tipos[k]]; }), 'Todos');
+
+    var ult = BIE.map(function (b) { return b.ultima_amortizacion; }).filter(Boolean).sort().pop();
+    var huecos = [];
+    var anios2 = Object.keys(anios).sort();
+    BIE.forEach(function (b) { var faltan = anios2.filter(function (a) { return a <= (ult || '').slice(0, 4) && A.falta(b, a, A.matriz(MOV, [b], [a])[0].total); }); if (faltan.length) huecos.push(b.bien + ' (' + faltan.join(', ') + ')'); });
+    el('aAviso').textContent = (ult ? '⚠ La última amortización calculada en Tango es del ' + fechaTxt(ult) + ': los saldos no incluyen la amortización posterior.' : '⚠ Tango no tiene amortizaciones calculadas.')
+      + (huecos.length ? ' Años sin amortizar en bienes con vida útil vigente: ' + huecos.join('; ') + '.' : '');
+
+    sp.addEventListener('change', function () {
+      var v = sp.value, d = null, h = null;
+      if (v.charAt(0) === 'a') { d = v.slice(1) + '-01-01'; h = v.slice(1) + '-12-31'; } else if (v === 'custom') { return; }
+      F.desde = d; F.hasta = h; el('afDesde').value = d || ''; el('afHasta').value = h || ''; pagina = 0; dibujar();
+    });
+    ['desde', 'hasta'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; el('afPeriodo').value = 'custom'; pagina = 0; dibujar(); }); });
+    ['tipoBien', 'depto', 'ubic', 'situacion', 'bien', 'tipoMov'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; pagina = 0; dibujar(); }); });
+    var t = null; el('afTexto').addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { F.texto = el('afTexto').value; pagina = 0; dibujar(); }, 250); });
+    el('aTabsPer').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; por = b.dataset.p; marcarTab('aTabsPer', b); dibujarPer(datos()); });
+    el('aTabsGr').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; dim = b.dataset.g; marcarTab('aTabsGr', b); dibujarGr(datos()); });
+    el('aTabsDet').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; vista = b.dataset.v; orden = vista === 'mov' ? { col: 'fecha', dir: -1 } : { col: 'valor_total', dir: -1 }; pagina = 0; marcarTab('aTabsDet', b); dibujarDetalle(datos()); });
+    el('aPagAnt').addEventListener('click', function () { if (pagina > 0) { pagina--; dibujarDetalle(datos()); } });
+    el('aPagSig').addEventListener('click', function () { pagina++; dibujarDetalle(datos()); });
+    el('aBtnCsv').addEventListener('click', descargarCsv);
+  }
+  function marcarTab(id, b) { el(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); }
+
+  function datos() { return { movs: A.filtrarMovs(MOV, IDX, F), bienes: BIE.filter(function (b) { return A.bienPasa(b, F); }) }; }
+  function ponerFiltro(k, v) { F[k] = v; pagina = 0; if (IDS[k]) el(IDS[k]).value = v || ''; dibujar(); }
+  function filtrarFechas(d, h) { F.desde = d; F.hasta = h; el('afDesde').value = d; el('afHasta').value = h; el('afPeriodo').value = el('afPeriodo').querySelector('option[value="a' + d.slice(0, 4) + '"]') && d.slice(5) === '01-01' && h.slice(5) === '12-31' ? 'a' + d.slice(0, 4) : 'custom'; pagina = 0; dibujar(); }
+
+  function dibujarChips() {
+    var c = el('aChips'); c.innerHTML = '';
+    var nombres = { desde: 'Desde', hasta: 'Hasta', tipoBien: 'Tipo de bien', depto: 'Departamento', ubic: 'Ubicación', situacion: 'Situación', bien: 'Bien', tipoMov: 'Movimiento', texto: 'Buscar' };
+    var hay = false;
+    Object.keys(nombres).forEach(function (k) {
+      if (!F[k]) return; hay = true;
+      var v = F[k], s = el(IDS[k]);
+      if (s.tagName === 'SELECT' && s.options[s.selectedIndex]) v = s.options[s.selectedIndex].text;
+      if (k === 'desde' || k === 'hasta') v = fechaTxt(v);
+      var ch = nuevo('span', 'chip-f', nombres[k] + ': ' + v), x = nuevo('button', null, '×'); x.title = 'Quitar';
+      x.addEventListener('click', function () { F[k] = null; el(IDS[k]).value = ''; if (k === 'desde' || k === 'hasta') el('afPeriodo').value = 'custom'; pagina = 0; dibujar(); });
+      ch.appendChild(x); c.appendChild(ch);
+    });
+    if (hay) { var lim = nuevo('button', 'btn secundario chico', 'Limpiar todo');
+      lim.addEventListener('click', function () { F = {}; Object.keys(IDS).forEach(function (k) { el(IDS[k]).value = ''; }); el('afPeriodo').value = 'todo'; pagina = 0; dibujar(); }); c.appendChild(lim); }
+  }
+
+  function dibujar() {
+    var d = datos();
+    [dibujarChips, dibujarKpis, dibujarPer, dibujarGr, dibujarTablas, dibujarDetalle].forEach(function (fn) {
+      try { fn(d); } catch (e) { console.error(e); aviso('aMensaje', 'Una parte de la pantalla no se pudo dibujar: ' + e.message); }
+    });
+  }
+
+  function tarjeta(cont, et, val, nota, clase, alClic) {
+    var t = nuevo('div', 'kpi'); t.appendChild(nuevo('div', 'et', et)); t.appendChild(nuevo('div', 'val' + (clase ? ' ' + clase : ''), val));
+    if (nota) t.appendChild(nuevo('div', 'nota', nota));
+    if (alClic) { t.style.cursor = 'pointer'; t.addEventListener('click', alClic); }
+    cont.appendChild(t);
+  }
+
+  function dibujarKpis(d) {
+    var k = A.kpis(BIE, d.movs, F), c = el('aKpis'); c.innerHTML = '';
+    tarjeta(c, 'Bienes', fmtN.format(k.n), 'en los filtros elegidos');
+    tarjeta(c, 'Valor de origen', g$(k.total), 'origen ' + g$(k.origen) + (k.mejoras ? ' + mejoras ' + g$(k.mejoras) : '') + (k.revaluos ? ' + revalúos ' + g$(k.revaluos) : ''));
+    tarjeta(c, 'Amortización acumulada', g$(k.amort), k.pct != null ? fmtD.format(k.pct) + ' % del valor de origen' : null);
+    tarjeta(c, 'Valor residual', g$(k.residual), 'valor contable neto, a hoy');
+    tarjeta(c, 'Amortización del período', g$(k.amort_periodo), 'comprobantes de depreciación');
+    tarjeta(c, 'Incorporaciones del período', g$(k.incorporado), 'altas, mejoras y revalúos');
+    tarjeta(c, 'Amortizados 90 % o más', fmtN.format(k.casi), 'clic para verlos', null, function () { ponerFiltro('situacion', 'casi'); });
+    tarjeta(c, 'Última amortización', k.ultima ? fechaTxt(k.ultima) : '—', 'calculada en Tango', 'neg');
+    el('aSubDet').textContent = '· ' + fmtN.format(d.bienes.length) + ' bienes, ' + fmtN.format(d.movs.length) + ' movimientos';
+  }
+
+  function opcionesBase(extra) {
+    var o = { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+      plugins: { legend: { display: true, position: 'top', align: 'end', labels: { color: COL.claro, boxWidth: 10, boxHeight: 10, font: { size: 11.5 } } },
+        tooltip: { backgroundColor: '#09233A', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, titleColor: COL.texto, bodyColor: COL.claro, bodyFont: { weight: '600' }, padding: 10, displayColors: true, callbacks: { label: function (c) { return c.dataset.label + ': ' + fmt$2.format(c.raw); } } } },
+      scales: { x: { grid: { display: false }, ticks: { color: COL.texto, font: { size: 11 } }, border: { color: 'rgba(255,255,255,.12)' } },
+                y: { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } } } };
+    return Object.assign(o, extra || {});
+  }
+  function cursor(e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; }
+
+  function dibujarPer(d) {
+    var p = A.porPeriodo(d.movs, por);
+    el('aSubPer').textContent = por === 'mes' ? '· por mes' : '· por año';
+    var cfg = { type: 'bar', data: { labels: p.map(function (x) { return por === 'mes' ? mesTxt(x.clave) : x.clave; }), datasets: [
+        { label: 'Amortización', data: p.map(function (x) { return x.amortizacion; }), backgroundColor: COL.naranja, borderRadius: 3, maxBarThickness: 26 },
+        { label: 'Incorporaciones', data: p.map(function (x) { return x.incorporado; }), backgroundColor: COL.azul, borderRadius: 3, maxBarThickness: 26 }] },
+      options: opcionesBase({ onHover: cursor, onClick: function (e, act) {
+        if (!act.length) return; var k = p[act[0].index].clave;
+        if (por === 'mes') { var fin = new Date(+k.slice(0, 4), +k.slice(5, 7), 0); filtrarFechas(k + '-01', k + '-' + String(fin.getDate()).padStart(2, '0')); } else filtrarFechas(k + '-01-01', k + '-12-31'); } }) };
+    if (graf.per) graf.per.destroy();
+    graf.per = new Chart(el('aChPer'), cfg);
+  }
+
+  function dibujarGr(d) {
+    var g = A.porGrupo(BIE, F, dim);
+    var cfg = { type: 'bar', data: { labels: g.map(function (x) { var s = String(x.nombre); return s.length > 28 ? s.slice(0, 27) + '…' : s; }), datasets: [
+        { label: 'Amortizado', data: g.map(function (x) { return x.amortizado; }), backgroundColor: COL.naranja, borderSkipped: false, maxBarThickness: 22 },
+        { label: 'Valor residual', data: g.map(function (x) { return x.residual; }), backgroundColor: COL.aqua, borderSkipped: false, maxBarThickness: 22 }] },
+      options: opcionesBase({ indexAxis: 'y', onHover: cursor, onClick: function (e, act) {
+        if (!act.length) return; var x = g[act[0].index];
+        ponerFiltro(dim === 'bien' ? 'bien' : dim === 'tipo_bien' ? 'tipoBien' : dim === 'departamento' ? 'depto' : 'ubic', x.clave); } }) };
+    cfg.options.scales.x = { stacked: true, grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } };
+    cfg.options.scales.y = { stacked: true, grid: { display: false }, ticks: { color: COL.claro, font: { size: 11.5 } }, border: { color: 'rgba(255,255,255,.12)' } };
+    cfg.options.plugins.tooltip.callbacks.title = function (c) { return g[c[0].dataIndex].nombre; };
+    cfg.options.plugins.tooltip.callbacks.footer = function (c) { var x = g[c[0].dataIndex]; return 'Valor de origen: ' + fmt$2.format(x.total); };
+    if (graf.gr) graf.gr.destroy();
+    graf.gr = new Chart(el('aChGr'), cfg);
+  }
+
+  function vacia(tb, n) { if (!tb.children.length) { var tr = nuevo('tr'), td = nuevo('td', 'gris', 'Sin datos para estos filtros.'); td.colSpan = n; tr.appendChild(td); tb.appendChild(tr); } }
+
+  function dibujarTablas(d) {
+    var anios = {}; d.movs.forEach(function (m) { if (m.cod_tipo === A.DEP) anios[m.fecha.slice(0, 4)] = 1; });
+    var lista = Object.keys(anios).sort().reverse(), bienes = d.bienes;
+    var cab = el('aCabMatriz'); cab.innerHTML = ''; cab.appendChild(nuevo('th', null, 'Año'));
+    bienes.forEach(function (b) { var th = nuevo('th', 'num', b.bien.length > 14 ? b.bien.slice(0, 13) + '…' : b.bien); th.title = b.bien; cab.appendChild(th); });
+    cab.appendChild(nuevo('th', 'num', 'Total'));
+    var tm = el('aTablaMatriz'); tm.innerHTML = '';
+    A.matriz(d.movs, bienes, lista).forEach(function (f) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar ese año'; tr.appendChild(nuevo('td', null, f.anio));
+      bienes.forEach(function (b) { var v = f.celdas[b.id_bien], falta = A.falta(b, f.anio, v); var td = nuevo('td', 'num' + (falta ? ' a-falta' : ''), v ? fmt$.format(v) : (falta ? '⚠ sin amortizar' : '—')); tr.appendChild(td); });
+      tr.appendChild(nuevo('td', 'num', g$(f.total)));
+      tr.addEventListener('click', function () { filtrarFechas(f.anio + '-01-01', f.anio + '-12-31'); });
+      tm.appendChild(tr);
+    }); vacia(tm, bienes.length + 2);
+    var tt = el('aTablaTipo'); tt.innerHTML = '';
+    A.porTipoMov(d.movs).forEach(function (x) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar este tipo';
+      tr.appendChild(nuevo('td', null, x.nombre)); tr.appendChild(nuevo('td', 'num', fmtN.format(x.comprobantes)));
+      tr.appendChild(nuevo('td', 'num', x.incorporado ? g$(x.incorporado) : '—')); tr.appendChild(nuevo('td', 'num', x.amortizado ? g$(x.amortizado) : '—'));
+      tr.addEventListener('click', function () { ponerFiltro('tipoMov', x.clave); vista = 'mov'; orden = { col: 'fecha', dir: -1 }; marcarTab('aTabsDet', el('aTabsDet').querySelector('[data-v="mov"]')); dibujarDetalle(datos()); });
+      tt.appendChild(tr);
+    }); vacia(tt, 4);
+  }
+
+  var COLS = {
+    bien: [['cod_bien', 'Código'], ['bien', 'Bien'], ['tipo_bien', 'Tipo'], ['departamento', 'Departamento'], ['fecha_activacion', 'Activación'], ['vida', 'Vida útil'], ['valor_total', 'Valor de origen', 1], ['amort_acumulada', 'Amortizado', 1], ['valor_residual', 'Residual', 1], ['porc_amortizado', '% amortizado', 1], ['ultima_amortizacion', 'Última amort.']],
+    mov: [['fecha', 'Fecha'], ['tipo', 'Movimiento'], ['nro_comprobante', 'Número'], ['bien', 'Bien'], ['incorporado', 'Incorporado', 1], ['amort', 'Amortización', 1], ['observaciones', 'Observaciones']]
+  };
+  function filasDetalle(d) {
+    if (vista === 'mov') return d.movs.map(function (m) { var o = Object.assign({}, m); o.incorporado = r2(+m.valor_origen + +m.valor_mejora + +m.valor_revaluo); o.amort = r2(+m.amortizacion + +m.amortizacion_inicial); return o; });
+    return d.bienes.map(function (b) { var o = Object.assign({}, b); o.vida = b.vida_util ? b.vida_util + ' ' + String(b.unidad_vida_util || '').toLowerCase() : null; return o; });
+  }
+
+  function dibujarDetalle(d) {
+    var cols = COLS[vista], cab = el('aCabDet'); cab.innerHTML = '';
+    cols.forEach(function (c) {
+      var th = nuevo('th', 'ord' + (c[2] ? ' num' : ''), c[1] + (orden.col === c[0] ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''));
+      th.addEventListener('click', function () { if (orden.col === c[0]) orden.dir = -orden.dir; else { orden.col = c[0]; orden.dir = c[2] ? -1 : 1; } dibujarDetalle(datos()); });
+      cab.appendChild(th);
+    });
+    var numerica = cols.some(function (c) { return c[0] === orden.col && c[2]; });
+    var filas = filasDetalle(d).sort(function (a, b) {
+      var x = a[orden.col], y = b[orden.col];
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      return (numerica ? (+x - +y) : String(x).localeCompare(String(y))) * orden.dir;
+    });
+    var paginas = Math.max(1, Math.ceil(filas.length / POR_PAG)); if (pagina >= paginas) pagina = paginas - 1;
+    var tb = el('aTablaDet'); tb.innerHTML = '';
+    filas.slice(pagina * POR_PAG, (pagina + 1) * POR_PAG).forEach(function (x) {
+      var tr = nuevo('tr', 'clic');
+      if (vista === 'mov') {
+        tr.title = 'Clic para filtrar este bien';
+        tr.appendChild(nuevo('td', null, fechaTxt(x.fecha))); tr.appendChild(nuevo('td', null, x.tipo)); tr.appendChild(nuevo('td', null, x.nro_comprobante || '—'));
+        tr.appendChild(nuevo('td', null, x.bien)); tr.appendChild(nuevo('td', 'num', x.incorporado ? fmt$2.format(x.incorporado) : '—'));
+        tr.appendChild(nuevo('td', 'num', x.amort ? fmt$2.format(x.amort) : '—')); tr.appendChild(nuevo('td', null, x.observaciones || ''));
+        tr.addEventListener('click', function () { ponerFiltro('bien', String(x.id_bien)); });
+      } else {
+        tr.title = 'Clic para ver los movimientos de este bien';
+        tr.appendChild(nuevo('td', null, x.cod_bien)); tr.appendChild(nuevo('td', null, x.bien)); tr.appendChild(nuevo('td', null, A.val(x.tipo_bien)));
+        tr.appendChild(nuevo('td', null, A.val(x.departamento))); tr.appendChild(nuevo('td', null, fechaTxt(x.fecha_activacion))); tr.appendChild(nuevo('td', null, x.vida || '—'));
+        tr.appendChild(nuevo('td', 'num', fmt$2.format(+x.valor_total))); tr.appendChild(nuevo('td', 'num', fmt$2.format(+x.amort_acumulada))); tr.appendChild(nuevo('td', 'num', fmt$2.format(+x.valor_residual)));
+        var tp = nuevo('td', 'num', x.porc_amortizado == null ? '—' : fmtD.format(+x.porc_amortizado) + ' %');
+        if (x.porc_amortizado != null) { var br = nuevo('div', 'a-barra'), sp = nuevo('span'); sp.style.width = Math.min(100, +x.porc_amortizado) + '%'; br.appendChild(sp); tp.appendChild(br); }
+        tr.appendChild(tp); tr.appendChild(nuevo('td', null, fechaTxt(x.ultima_amortizacion)));
+        tr.addEventListener('click', function () { F.bien = String(x.id_bien); el('afBien').value = F.bien; vista = 'mov'; orden = { col: 'fecha', dir: -1 }; pagina = 0; marcarTab('aTabsDet', el('aTabsDet').querySelector('[data-v="mov"]')); dibujar(); });
+      }
+      tb.appendChild(tr);
+    });
+    vacia(tb, cols.length);
+    el('aPagInfo').textContent = filas.length ? 'Mostrando ' + (pagina * POR_PAG + 1) + '–' + Math.min(filas.length, (pagina + 1) * POR_PAG) + ' de ' + fmtN.format(filas.length) + ' · página ' + (pagina + 1) + ' de ' + paginas : '';
+    el('aPagAnt').disabled = pagina === 0; el('aPagSig').disabled = pagina >= paginas - 1;
+  }
+
+  function descargarCsv() {
+    var filas = filasDetalle(datos());
+    var cab = vista === 'mov' ? ['fecha', 'cod_tipo', 'tipo', 'nro_comprobante', 'estado', 'cod_bien', 'bien', 'valor_origen', 'valor_mejora', 'valor_revaluo', 'amortizacion', 'amortizacion_inicial', 'rdo_baja', 'importe_venta', 'observaciones']
+      : ['cod_bien', 'bien', 'detalle', 'rubro', 'tipo_bien', 'estado', 'ubicacion', 'departamento', 'responsable', 'fecha_alta', 'fecha_activacion', 'fecha_baja', 'valor_origen', 'valor_mejora', 'valor_revaluo', 'valor_total', 'amort_acumulada', 'valor_residual', 'porc_amortizado', 'vida_util', 'unidad_vida_util', 'metodo', 'ultima_amortizacion'];
+    var esc = function (v) { v = v == null ? '' : String(v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var txt = cab.join(';') + '\n' + filas.map(function (x) { return cab.map(function (c) { return esc(x[c]); }).join(';'); }).join('\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + txt], { type: 'text/csv;charset=utf-8' }));
+    a.download = vista === 'mov' ? 'activo_fijo_movimientos_empresa_ejemplo.csv' : 'activo_fijo_bienes_empresa_ejemplo.csv'; document.body.appendChild(a); a.click(); a.remove();
+  }
+})();
+</script>

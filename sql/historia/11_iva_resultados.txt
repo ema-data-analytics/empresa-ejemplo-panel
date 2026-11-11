@@ -1,0 +1,20 @@
+PRUEBAS IVA - 26/09/2026 - base de prueba ushvdubzbpctctodujen (solo lectura, todo se deshizo)
+I01 comprobantes de venta = gva12 sin anulados ni recibos (174): 174 PASA
+I02 el signo por tipo interno de Tango coincide con el codigo (creditos CDE, AJC, N/C restan; 0 diferencias): 0 PASA
+I03 debito fiscal = IVA de gva12 con signo (404013.09): 404013.09 PASA
+I04 ventas: total = gravado + exento + IVA + internos + otros (0 diferencias): 0 PASA
+I05 credito fiscal = IVA del modulo Compras ya probado (87 comprobantes, 80061.65): 87, 80061.65 PASA
+I06 compras: IVA = suma por alicuota (0 diferencias): 0 PASA
+I07 compras: total = neto + exento + IVA + otros (0 diferencias): 0 PASA
+I08 compras: otros impuestos y percepciones = modulo Compras (22624.14): 22624.14 PASA
+I09 filtro 2023 en ventas (118): 118 PASA
+I10 con usuario logueado (174 ventas, 87 compras): PASA
+I11 anonimo no puede ejecutar: PASA
+I12 posicion de IVA por año: 2021 debito 5937.02 credito 1102.50 saldo 4834.52 | 2022 debito 6597.70 credito 12737.68 saldo -6139.98 | 2023 debito 326898.08 credito 42220.99 saldo 284677.09 | 2024 debito 49732.25 credito 24000.48 saldo 25731.77 | 2025 debito 66003.00 credito 0 saldo 66003.00 | 2026 debito -51154.96 credito 0 saldo -51154.96
+I13 ventas por tipo (IVA con signo): AJC:1 -7.24, AJD:1 8.50, CDE:13 -245128.26, DDC:1 333.98, FAC:146 648206.27, N/D:2 139.53, NDM:10 460.31
+I14 sin cuit en ventas: 40 de 174; comprobantes AFIP cargados para cruzar: 0
+Resumen: 11 de 11 pruebas PASAN. I12 a I14 son informativas.
+
+ERROR ENCONTRADO Y CORREGIDO: en la primera corrida I02 e I03 dieron FALLA. La funcion de ventas tomaba como credito solo el tipo interno 'NC',
+pero Tango marca los creditos por devolucion (CDE) y ajustes de credito (AJC) con tipo interno 'CC'. Esos 14 comprobantes se sumaban en vez de restarse
+y el debito fiscal daba 894.284,09 en lugar de 404.013,09. Se corrigio la regla (CC o NC = credito, igual que el modulo Ventas) y se repitieron todas las pruebas.

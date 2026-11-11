@@ -1,0 +1,47 @@
+<!-- Ventana: nuevo usuario -->
+<div class="fondo-modal oculto" id="modalNuevo">
+  <form class="modal" id="formNuevo" autocomplete="off">
+    <h4>Nuevo usuario</h4><div class="gris">Se crea activo con una contraseña temporal. En su primer ingreso la tiene que cambiar.</div>
+    <label for="nuevoNombre">Nombre</label><input type="text" id="nuevoNombre" required maxlength="80" minlength="2">
+    <label for="nuevoEmail">Email</label><input type="email" id="nuevoEmail" required maxlength="120">
+    <label for="nuevoRol">Rol</label><select id="nuevoRol" required></select>
+    <div id="nuevoMensaje" class="mensaje oculto"></div>
+    <div class="acciones"><button type="button" class="btn secundario" data-cerrar="modalNuevo">Cancelar</button><button class="btn" id="btnCrearUsuario" type="submit">Crear usuario</button></div>
+  </form>
+</div>
+
+<!-- Ventana: contraseña temporal (se muestra una sola vez) -->
+<div class="fondo-modal oculto" id="modalTemporal">
+  <div class="modal">
+    <h4 id="temporalTitulo">Contraseña temporal</h4>
+    <div class="gris" id="temporalPara"></div>
+    <div class="clave-temporal" id="temporalClave"></div>
+    <div class="gris" style="font-size:12px">Pasásela a la persona por un medio seguro. <b>Se muestra solo esta vez</b>: al cerrar esta ventana no se puede volver a ver. Al ingresar, el sistema le pide cambiarla.</div>
+    <div id="temporalMensaje" class="mensaje oculto"></div>
+    <div class="acciones"><button type="button" class="btn secundario" id="btnCopiarTemporal">Copiar</button><button type="button" class="btn" id="btnCerrarTemporal">Listo, ya la anoté</button></div>
+  </div>
+</div>
+
+<!-- Ventana: confirmar blanqueo -->
+<div class="fondo-modal oculto" id="modalBlanquear">
+  <div class="modal">
+    <h4>Blanquear contraseña</h4>
+    <div class="gris" id="blanquearPara"></div>
+    <div style="margin-top:10px;font-size:13px;line-height:1.5">Se le genera una contraseña temporal nueva y la actual deja de servir. En su próximo ingreso la tiene que cambiar.</div>
+    <div id="blanquearMensaje" class="mensaje oculto"></div>
+    <div class="acciones"><button type="button" class="btn secundario" data-cerrar="modalBlanquear">Cancelar</button><button type="button" class="btn" id="btnConfirmarBlanqueo">Blanquear</button></div>
+  </div>
+</div>
+
+<!-- Ventana: rol -->
+<div class="fondo-modal oculto" id="modalRol">
+  <form class="modal" id="formRol" autocomplete="off">
+    <h4 id="rolTitulo">Nuevo rol</h4><div class="gris" id="rolAyuda">Un rol nuevo nace sin acceso a ningún módulo: después marcás sus permisos.</div>
+    <label for="rolNombre">Nombre</label><input type="text" id="rolNombre" required maxlength="60">
+    <label for="rolCodigo">Código (minúsculas, sin espacios)</label><input type="text" id="rolCodigo" required maxlength="30" pattern="[a-z][a-z0-9_]{1,29}">
+    <label for="rolDescripcion">Descripción</label><input type="text" id="rolDescripcion" maxlength="300">
+    <label class="check"><input type="checkbox" id="rolActivo" checked> Activo</label>
+    <div id="rolMensaje" class="mensaje oculto"></div>
+    <div class="acciones"><button type="button" class="btn secundario" data-cerrar="modalRol">Cancelar</button><button class="btn" id="btnGuardarRol" type="submit">Guardar</button></div>
+  </form>
+</div>

@@ -1,0 +1,17 @@
+PRUEBAS LEGAJOS - 26/09/2026 - base de prueba ushvdubzbpctctodujen (solo lectura, todo se deshizo)
+RESULTADOS (solo lectura)
+L01 legajos = filas de legajo_cloud (37): 37 PASA
+L02 recibos = filas de tot_liquidacion (7857): 7857 PASA
+L03 neto y haberes = tot_liquidacion (223611315.84 / 290635294.75): 223611315.84 / 290635294.75 PASA
+L04 en cada recibo neto = haberes + asignaciones + no remunerativo - retenciones (0 diferencias): 0 PASA
+L05 totales de cada recibo = suma de sus renglones por tipo de concepto (0 diferencias): 0 PASA
+L06 conceptos agrupados = suma de liquidacion (453637036.81): 453637036.81 PASA
+L07 un recibo: sus haberes = total del recibo (2711.13): 2711.13 PASA
+L08 recibos de legajos que no estan en el maestro: 0 PASA
+L09 legajos activos / egresados: 27 / 10
+L10 recibos por tipo de liquidacion: Contribuciones:2888, Mensual:2773, Aguinaldo:566, Segunda Quincena:477, Primera Quincena:477, Extraordinaria Remunerativa:273, Extraordinaria No Remunerativa:205, Vacaciones:191, Bajas:7
+L11 periodos: 2013-01-01 a 2023-12-01
+L12 filtro 2023 = recibos 2023 (697): 697 PASA
+L13 un usuario sin rol super/admin no ve nada (legajos, recibos, renglones): 0, 0, 0 PASA
+L14 anonimo no puede ejecutar: PASA
+Resumen: 12 de 12 pruebas PASAN. L09, L10 y L11 son informativas.

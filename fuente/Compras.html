@@ -1,0 +1,547 @@
+<!-- ============ MODULO COMPRAS ============ -->
+<!-- Usa los estilos comunes de pantalla (filtros, kpis, paneles, tablas) que define el módulo Ventas; acá solo van los propios. -->
+<style>
+  .kpis.ocho { grid-template-columns:repeat(4,1fr); }
+  @media (max-width: 900px) { .kpis.ocho { grid-template-columns:repeat(2,1fr); } }
+  .comp-barra { margin:10px 0 12px; }
+  .comp-barra .fila { display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px; }
+  .comp-barra .riel { height:10px; background:rgba(255,255,255,.06); border-radius:5px; overflow:hidden; }
+  .comp-barra .relleno { height:100%; background:#3987e5; border-radius:5px; }
+  .aviso-datos { font-size:12px; color:var(--amber); margin:0 0 14px; line-height:1.5; }
+  .precio-resumen { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; margin:8px 0 12px; }
+  .precio-resumen div { background:rgba(255,255,255,.04); border-radius:8px; padding:8px 10px; font-size:11.5px; color:var(--gray); }
+  .precio-resumen b { display:block; font-size:15px; color:var(--off-white); margin-top:3px; font-family:'Sora',sans-serif; }
+  .sube { color:#ff8b8f; } .baja { color:#4fd1a5; }
+  tr.sel td { background:rgba(57,135,229,.14); }
+</style>
+
+<section class="modulo" id="modCompras">
+  <div class="filtros">
+    <div class="fila-filtros">
+      <div class="filtro"><label for="cfPeriodo">Período</label><select id="cfPeriodo"></select></div>
+      <div class="filtro"><label for="cfDesde">Desde</label><input type="date" id="cfDesde"></div>
+      <div class="filtro"><label for="cfHasta">Hasta</label><input type="date" id="cfHasta"></div>
+      <div class="filtro"><label for="cfProveedor">Proveedor</label><select id="cfProveedor"></select></div>
+      <div class="filtro"><label for="cfProvincia">Provincia</label><select id="cfProvincia"></select></div>
+      <div class="filtro"><label for="cfArticulo">Artículo</label><select id="cfArticulo"></select></div>
+      <div class="filtro"><label for="cfTipo">Comprobante</label><select id="cfTipo"></select></div>
+      <div class="filtro"><label for="cfEstado">Estado</label><select id="cfEstado"></select></div>
+      <div class="filtro"><label for="cfDetalle">Detalle de artículos</label>
+        <select id="cfDetalle"><option value="">Todos</option><option value="con">Con artículos</option><option value="sin">Sin artículos</option></select></div>
+      <div class="filtro ancho"><label for="cfTexto">Buscar</label><input type="text" id="cfTexto" placeholder="Proveedor, número de comprobante, artículo…"></div>
+    </div>
+    <div class="chips" id="cChips"></div>
+  </div>
+
+  <div id="cMensaje" class="mensaje oculto"></div>
+  <div id="cCuerpo">
+    <div class="aviso-datos" id="cAvisoDatos"></div>
+    <div class="kpis ocho" id="cKpis"></div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Evolución mensual <span class="sub" id="cSubEvol"></span></span>
+          <span class="tabs" id="cTabsEvol">
+            <button data-m="total" class="on">Total</button><button data-m="neto">Neto gravado</button><button data-m="iva">IVA</button><button data-m="comprobantes">Comprobantes</button>
+          </span></h3>
+        <div class="lienzo"><canvas id="cChEvol" aria-label="Evolución mensual de compras"></canvas></div>
+        <div class="ayuda">Clic en una barra: filtra ese mes.</div>
+      </div>
+      <div class="panel">
+        <h3><span>Ranking <span class="sub">top 10</span></span>
+          <span class="tabs" id="cTabsRank">
+            <button data-d="proveedor" class="on">Proveedores</button><button data-d="articulo">Artículos</button><button data-d="provincia">Provincias</button>
+          </span></h3>
+        <div class="lienzo alto"><canvas id="cChRank" aria-label="Ranking de compras"></canvas></div>
+        <div class="ayuda" id="cAyudaRank">Clic en una barra: filtra por ese elemento.</div>
+      </div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3>Por estado</h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Estado</th><th class="num">Comprobantes</th><th class="num">Total</th><th class="num">Participación</th></tr></thead>
+          <tbody id="cTablaEstado"></tbody></table></div>
+        <h3 style="margin-top:18px">Por tipo de comprobante</h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Tipo</th><th class="num">Comprobantes</th><th class="num">Total</th><th class="num">Participación</th></tr></thead>
+          <tbody id="cTablaTipo"></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h3>Composición del total</h3>
+        <div id="cComposicion"></div>
+      </div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Precio de compra <span class="sub" id="cSubPrecio"></span></span></h3>
+        <div class="precio-resumen" id="cPrecioRes"></div>
+        <div id="cPrecioAviso"></div>
+        <div class="lienzo"><canvas id="cChPrecio" aria-label="Precio de compra por fecha"></canvas></div>
+        <div class="ayuda">Precio unitario neto de cada compra. Elegí el artículo en la tabla de la derecha o en el filtro Artículo.</div>
+      </div>
+      <div class="panel">
+        <h3><span>Variación de precio por artículo <span class="sub">primera vs. última compra</span></span></h3>
+        <div class="tabla-scroll" style="max-height:420px"><table>
+          <thead><tr><th>Artículo</th><th class="num">Compras</th><th class="num">Primer precio</th><th class="num">Último precio</th><th class="num">Variación</th></tr></thead>
+          <tbody id="cTablaVar"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><span>Detalle <span class="sub" id="cSubDet"></span></span>
+        <span><span class="tabs" id="cTabsDet"><button data-v="comp" class="on">Comprobantes</button><button data-v="lin">Renglones de artículos</button></span>
+        <button class="btn secundario chico" id="cBtnCsv">Descargar CSV</button></span></h3>
+      <div class="tabla-scroll"><table>
+        <thead><tr id="cCabDet"></tr></thead>
+        <tbody id="cTablaDet"></tbody></table></div>
+      <div class="pie-tabla"><span id="cPagInfo"></span>
+        <span><button class="btn secundario chico" id="cPagAnt">‹ Anterior</button> <button class="btn secundario chico" id="cPagSig">Siguiente ›</button></span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Lógica pura (sin pantalla): se prueba aparte contra la base.
+  // comps  = api_compras_comprobantes_v2 (una fila por comprobante, N/C en negativo)
+  // lineas = api_compras_articulos_v2     (una fila por renglón de artículo, N/C en negativo)
+  // ---------------------------------------------------------------------------
+  var C = window.ComprasLogica = {};
+  function r2(x) { return Math.round(x * 100) / 100; }
+
+  C.ESTADOS = { PEN: 'Pendiente de pago', CAN: 'Cancelado (pagado)' };
+  C.nombreEstado = function (e) { return C.ESTADOS[e] ? C.ESTADOS[e] + ' (' + e + ')' : e + ' (código de Tango, sin descripción)'; };
+  C.SALTO_RARO = 1000;   // variación de precio (%) a partir de la cual se avisa que conviene revisar el dato
+  C.TIPOS = { 'FAC': 'Factura', 'N/C': 'Nota de crédito', 'N/D': 'Nota de débito' };
+  C.nombreTipo = function (t) { return C.TIPOS[t] || t; };
+
+  // Devuelve {comps, lineas} filtrados. El filtro de artículo deja los comprobantes que tienen ese artículo
+  // y, de sus renglones, solo los de ese artículo.
+  C.filtrar = function (comps, lineas, f) {
+    var txt = (f.texto || '').trim().toLowerCase();
+    var porComp = {};
+    lineas.forEach(function (l) { (porComp[l.id_cpa04] = porComp[l.id_cpa04] || []).push(l); });
+    var cs = comps.filter(function (c) {
+      if (f.desde && c.fecha < f.desde) return false;
+      if (f.hasta && c.fecha > f.hasta) return false;
+      if (f.proveedor && c.cod_provee !== f.proveedor) return false;
+      if (f.provincia && c.provincia !== f.provincia) return false;
+      if (f.tipo && c.t_comp !== f.tipo) return false;
+      if (f.estado && c.estado !== f.estado) return false;
+      var ls = porComp[c.id_cpa04] || [];
+      if (f.detalle === 'con' && !ls.length) return false;
+      if (f.detalle === 'sin' && ls.length) return false;
+      if (f.articulo && !ls.some(function (l) { return l.cod_articu === f.articulo; })) return false;
+      if (txt) {
+        var h = (c.proveedor + ' ' + c.cod_provee + ' ' + c.n_comp + ' ' + ls.map(function (l) { return l.articulo + ' ' + l.cod_articu; }).join(' ')).toLowerCase();
+        if (h.indexOf(txt) < 0) return false;
+      }
+      return true;
+    });
+    var ids = {}; cs.forEach(function (c) { ids[c.id_cpa04] = 1; });
+    var ls2 = lineas.filter(function (l) { return ids[l.id_cpa04] && (!f.articulo || l.cod_articu === f.articulo); });
+    return { comps: cs, lineas: ls2 };
+  };
+
+  C.kpis = function (cs) {
+    var k = { total: 0, neto: 0, exento: 0, iva: 0, otros: 0, comprobantes: cs.length, proveedores: 0, pendiente: 0, n_pendiente: 0, nc: 0, n_nc: 0 };
+    var pv = {};
+    cs.forEach(function (c) {
+      k.total += +c.total; k.neto += +c.neto; k.exento += +c.exento; k.iva += +c.iva;
+      k.otros += (+c.total) - (+c.neto) - (+c.exento) - (+c.iva);
+      pv[c.cod_provee] = 1;
+      if (c.estado === 'PEN') { k.pendiente += +c.total; k.n_pendiente++; }
+      if (c.signo < 0) { k.nc += +c.total; k.n_nc++; }
+    });
+    k.proveedores = Object.keys(pv).length;
+    ['total', 'neto', 'exento', 'iva', 'otros', 'pendiente', 'nc'].forEach(function (x) { k[x] = r2(k[x]); });
+    k.promedio = k.comprobantes ? r2(k.total / k.comprobantes) : 0;
+    return k;
+  };
+
+  C.porMes = function (cs) {
+    var m = {};
+    cs.forEach(function (c) {
+      var k = c.fecha.slice(0, 7);
+      if (!m[k]) m[k] = { mes: k, total: 0, neto: 0, iva: 0, comprobantes: 0 };
+      m[k].total += +c.total; m[k].neto += +c.neto; m[k].iva += +c.iva; m[k].comprobantes++;
+    });
+    return Object.keys(m).sort().map(function (k) { var x = m[k]; return { mes: k, total: r2(x.total), neto: r2(x.neto), iva: r2(x.iva), comprobantes: x.comprobantes }; });
+  };
+
+  // proveedor y provincia: total con impuestos de los comprobantes. artículo: importe neto de los renglones.
+  C.ranking = function (cs, ls, dim, n) {
+    var src = dim === 'articulo' ? ls : cs;
+    var clave = { proveedor: 'cod_provee', articulo: 'cod_articu', provincia: 'provincia' }[dim];
+    var nombre = { proveedor: 'proveedor', articulo: 'articulo', provincia: 'provincia' }[dim];
+    var campo = dim === 'articulo' ? 'importe' : 'total';
+    var g = {};
+    src.forEach(function (x) {
+      var k = x[clave] == null ? '' : String(x[clave]);
+      if (!g[k]) g[k] = { clave: k, nombre: x[nombre], valor: 0 };
+      g[k].valor += +x[campo];
+    });
+    var arr = Object.keys(g).map(function (k) { g[k].valor = r2(g[k].valor); return g[k]; }).sort(function (a, b) { return b.valor - a.valor; });
+    if (arr.length > n) {
+      var resto = arr.slice(n).reduce(function (s, x) { return s + x.valor; }, 0);
+      arr = arr.slice(0, n); arr.push({ clave: null, nombre: 'Otros (' + (Object.keys(g).length - n) + ')', valor: r2(resto) });
+    }
+    return arr;
+  };
+
+  // Agrupa comprobantes por un campo. Participación sobre el total en valor absoluto (las N/C restan).
+  C.agrupar = function (cs, campo) {
+    var g = {}, abs = 0;
+    cs.forEach(function (c) {
+      var k = c[campo]; if (!g[k]) g[k] = { clave: k, comprobantes: 0, total: 0 };
+      g[k].comprobantes++; g[k].total += +c.total; abs += Math.abs(+c.total);
+    });
+    return Object.keys(g).map(function (k) { var x = g[k]; return { clave: k, comprobantes: x.comprobantes, total: r2(x.total), pct: abs ? Math.round(1000 * Math.abs(x.total) / abs) / 10 : null }; })
+      .sort(function (a, b) { return b.total - a.total; });
+  };
+
+  // Historial de precio de un artículo (solo facturas y notas de débito: la N/C no es una compra a ese precio).
+  C.precios = function (ls, cod) {
+    var h = ls.filter(function (l) { return l.cod_articu === cod && l.t_comp !== 'N/C' && l.precio_unitario != null; })
+      .map(function (l) { return { fecha: l.fecha, precio: +l.precio_unitario, cantidad: +l.cantidad, proveedor: l.proveedor, n_comp: l.n_comp }; })
+      .sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; });
+    if (!h.length) return { historial: [], compras: 0 };
+    var ps = h.map(function (x) { return x.precio; });
+    var cant = h.reduce(function (s, x) { return s + x.cantidad; }, 0);
+    var imp = h.reduce(function (s, x) { return s + x.cantidad * x.precio; }, 0);
+    var pri = h[0].precio, ult = h[h.length - 1].precio;
+    return { historial: h, compras: h.length, primero: pri, ultimo: ult, minimo: Math.min.apply(null, ps), maximo: Math.max.apply(null, ps),
+      promedio: cant ? r2(imp / cant) : null, variacion_pct: pri ? Math.round(1000 * (ult - pri) / pri) / 10 : null };
+  };
+
+  C.variaciones = function (ls) {
+    var cods = {}; ls.forEach(function (l) { cods[l.cod_articu] = l.articulo; });
+    return Object.keys(cods).map(function (k) { var p = C.precios(ls, k); return { cod_articu: k, articulo: cods[k], compras: p.compras, primero: p.primero, ultimo: p.ultimo, variacion_pct: p.variacion_pct }; })
+      .filter(function (x) { return x.compras > 0; })
+      .sort(function (a, b) { var x = a.variacion_pct == null ? -1e9 : a.variacion_pct, y = b.variacion_pct == null ? -1e9 : b.variacion_pct; return y - x || b.compras - a.compras; });
+  };
+
+  if (typeof window.document === 'undefined') return;
+
+  // ---------------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------------
+  var COMPS = null, LINS = null, F = {}, graf = {}, metrica = 'total', dimRank = 'proveedor', vista = 'comp', artSel = null;
+  var orden = { col: 'fecha', dir: -1 }, pagina = 0, POR_PAG = 25;
+  var COL = { azul: '#3987e5', naranja: '#d95926', aqua: '#199e70', rojo: '#e66767', grilla: 'rgba(255,255,255,0.07)', texto: '#7C93A3', claro: '#F2F5F3' };
+  var fmt$ = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+  var fmt$2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 });
+  var fmtN = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  var fmtD = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
+  function g$(x) { return x == null ? '—' : fmt$.format(x); }
+  function el(id) { return document.getElementById(id); }
+  function fechaTxt(s) { if (!s) return '—'; var p = s.slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function mesTxt(k) { var n = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return n[+k.slice(5, 7) - 1] + ' ' + k.slice(2, 4); }
+  function nuevo(tag, clase, texto) { var e = document.createElement(tag); if (clase) e.className = clase; if (texto != null) e.textContent = texto; return e; }
+  function pct(x) { return x == null ? '—' : (x > 0 ? '+' : '') + fmtD.format(x) + ' %'; }
+  function compacto(v) { var a = Math.abs(v); if (a >= 1e6) return fmtD.format(v / 1e6) + ' M'; if (a >= 1e3) return fmtN.format(v / 1e3) + ' mil'; return fmtN.format(v); }
+
+  window.MODULOS = window.MODULOS || {};
+  window.MODULOS.Compras = { titulo: 'Compras', cargar: cargar };
+
+  // Filtro que llega desde el Radar (clic en un proveedor, artículo, mes…): se aplica al abrir la pantalla.
+  function aplicarPendiente() {
+    var p = window.__filtroPendiente; if (!p || p.modulo !== 'Compras') return;
+    window.__filtroPendiente = null; F = {}; pagina = 0;
+    Object.keys(IDS).forEach(function (k) { el(IDS[k]).value = ''; });
+    Object.keys(p.f || {}).forEach(function (k) { if (IDS[k] && p.f[k] != null) { F[k] = p.f[k]; el(IDS[k]).value = p.f[k]; if (k === 'articulo') artSel = p.f[k]; } });
+    el('cfPeriodo').value = (F.desde || F.hasta) ? 'custom' : 'todo';
+  }
+
+  function cargar() {
+    if (COMPS) { aplicarPendiente(); dibujar(); return; }
+    el('cCuerpo').classList.add('cargando-suave');
+    Promise.all([sb.rpc('api_compras_comprobantes_v2', {}), sb.rpc('api_compras_articulos_v2', {})]).then(function (rs) {
+      el('cCuerpo').classList.remove('cargando-suave');
+      var err = rs[0].error || rs[1].error;
+      if (err) { aviso('cMensaje', 'No se pudieron leer las compras: ' + textoError(err)); return; }
+      COMPS = (rs[0].data || []).map(function (c) { c.fecha = String(c.fecha).slice(0, 10); return c; });
+      LINS = (rs[1].data || []).map(function (l) { l.fecha = String(l.fecha).slice(0, 10); return l; });
+      armarFiltros(); aplicarPendiente(); dibujar();
+    }).catch(function (e) { el('cCuerpo').classList.remove('cargando-suave'); aviso('cMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  function opciones(sel, pares, todos) { sel.innerHTML = ''; sel.appendChild(new Option(todos, '')); pares.forEach(function (p) { sel.appendChild(new Option(p[1], p[0])); }); }
+  function unicos(src, clave, nombre, fn) {
+    var m = {}; src.forEach(function (x) { if (x[clave] != null) m[x[clave]] = fn ? fn(x[nombre]) : x[nombre]; });
+    return Object.keys(m).map(function (k) { return [k, m[k]]; }).sort(function (a, b) { return String(a[1]).localeCompare(String(b[1])); });
+  }
+
+  var IDS = { desde: 'cfDesde', hasta: 'cfHasta', proveedor: 'cfProveedor', provincia: 'cfProvincia', articulo: 'cfArticulo', tipo: 'cfTipo', estado: 'cfEstado', detalle: 'cfDetalle', texto: 'cfTexto' };
+
+  function armarFiltros() {
+    var fechas = COMPS.map(function (c) { return c.fecha; }).sort();
+    var min = fechas[0], max = fechas[fechas.length - 1];
+    el('cfDesde').min = el('cfHasta').min = min; el('cfDesde').max = el('cfHasta').max = max;
+    var anios = {}; COMPS.forEach(function (c) { anios[c.fecha.slice(0, 4)] = 1; });
+    var per = [['todo', 'Todo (' + fechaTxt(min) + ' al ' + fechaTxt(max) + ')'], ['12m', 'Últimos 12 meses con datos'], ['6m', 'Últimos 6 meses con datos']];
+    Object.keys(anios).sort().reverse().forEach(function (a) { per.push(['a' + a, 'Año ' + a]); });
+    per.push(['custom', 'Personalizado']);
+    var sp = el('cfPeriodo'); sp.innerHTML = ''; per.forEach(function (p) { sp.appendChild(new Option(p[1], p[0])); });
+    opciones(el('cfProveedor'), unicos(COMPS, 'cod_provee', 'proveedor'), 'Todos');
+    opciones(el('cfProvincia'), unicos(COMPS, 'provincia', 'provincia'), 'Todas');
+    opciones(el('cfArticulo'), unicos(LINS, 'cod_articu', 'articulo'), 'Todos');
+    opciones(el('cfTipo'), unicos(COMPS, 't_comp', 't_comp', C.nombreTipo), 'Todos');
+    opciones(el('cfEstado'), unicos(COMPS, 'estado', 'estado', C.nombreEstado), 'Todos');
+
+    // avisos sobre los datos, con los números de la base
+    var sinVto = COMPS.filter(function (c) { return !c.vencimiento; }).length;
+    var conLin = {}; LINS.forEach(function (l) { conLin[l.id_cpa04] = 1; });
+    var sinArt = COMPS.filter(function (c) { return !conLin[c.id_cpa04]; });
+    var av = [];
+    if (sinVto) av.push('⚠ ' + fmtN.format(sinVto) + ' de ' + fmtN.format(COMPS.length) + ' comprobantes no tienen fecha de vencimiento cargada en Tango, así que no se puede calcular lo vencido.');
+    if (sinArt.length) av.push('ℹ ' + fmtN.format(sinArt.length) + ' comprobantes (' + g$(sinArt.reduce(function (s, c) { return s + (+c.total); }, 0)) + ') no tienen detalle de artículos: entran en los totales pero no en los rankings de artículos ni en precios.');
+    el('cAvisoDatos').textContent = ''; av.forEach(function (t, i) { if (i) el('cAvisoDatos').appendChild(document.createElement('br')); el('cAvisoDatos').appendChild(document.createTextNode(t)); });
+
+    sp.addEventListener('change', function () {
+      var v = sp.value, d = null, h = null;
+      if (v === '12m' || v === '6m') { var n = v === '12m' ? 12 : 6; var x = new Date(max + 'T00:00:00'); x.setMonth(x.getMonth() - n); x.setDate(x.getDate() + 1); d = x.toISOString().slice(0, 10); h = max; }
+      else if (v.charAt(0) === 'a') { d = v.slice(1) + '-01-01'; h = v.slice(1) + '-12-31'; }
+      else if (v === 'custom') { return; }
+      F.desde = d; F.hasta = h; el('cfDesde').value = d || ''; el('cfHasta').value = h || ''; pagina = 0; dibujar();
+    });
+    ['desde', 'hasta'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; el('cfPeriodo').value = 'custom'; pagina = 0; dibujar(); }); });
+    ['proveedor', 'provincia', 'articulo', 'tipo', 'estado', 'detalle'].forEach(function (k) {
+      el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; if (k === 'articulo' && F.articulo) artSel = F.articulo; pagina = 0; dibujar(); });
+    });
+    var t = null;
+    el('cfTexto').addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { F.texto = el('cfTexto').value; pagina = 0; dibujar(); }, 250); });
+    el('cTabsEvol').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; metrica = b.dataset.m; marcarTab('cTabsEvol', b); dibujarEvol(filtrado()); });
+    el('cTabsRank').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; dimRank = b.dataset.d; marcarTab('cTabsRank', b); dibujarRank(filtrado()); });
+    el('cTabsDet').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; vista = b.dataset.v; orden = { col: 'fecha', dir: -1 }; pagina = 0; marcarTab('cTabsDet', b); dibujarDetalle(filtrado()); });
+    el('cPagAnt').addEventListener('click', function () { if (pagina > 0) { pagina--; dibujarDetalle(filtrado()); } });
+    el('cPagSig').addEventListener('click', function () { pagina++; dibujarDetalle(filtrado()); });
+    el('cBtnCsv').addEventListener('click', descargarCsv);
+  }
+
+  function filtrado() { return C.filtrar(COMPS, LINS, F); }
+  function marcarTab(id, b) { el(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); }
+
+  function ponerFiltro(clave, valor) {
+    F[clave] = valor; pagina = 0; if (IDS[clave]) el(IDS[clave]).value = valor || '';
+    if (clave === 'articulo' && valor) artSel = valor;
+    dibujar();
+  }
+
+  function dibujarChips() {
+    var c = el('cChips'); c.innerHTML = '';
+    var nombres = { desde: 'Desde', hasta: 'Hasta', proveedor: 'Proveedor', provincia: 'Provincia', articulo: 'Artículo', tipo: 'Comprobante', estado: 'Estado', detalle: 'Detalle', texto: 'Buscar' };
+    var hay = false;
+    Object.keys(nombres).forEach(function (k) {
+      if (!F[k]) return; hay = true;
+      var v = F[k], s = el(IDS[k]);
+      if (s.tagName === 'SELECT' && s.options[s.selectedIndex]) v = s.options[s.selectedIndex].text;
+      if (k === 'desde' || k === 'hasta') v = fechaTxt(v);
+      var ch = nuevo('span', 'chip-f', nombres[k] + ': ' + v);
+      var x = nuevo('button', null, '×'); x.title = 'Quitar';
+      x.addEventListener('click', function () { F[k] = null; el(IDS[k]).value = ''; if (k === 'desde' || k === 'hasta') el('cfPeriodo').value = 'custom'; pagina = 0; dibujar(); });
+      ch.appendChild(x); c.appendChild(ch);
+    });
+    if (hay) {
+      var lim = nuevo('button', 'btn secundario chico', 'Limpiar todo');
+      lim.addEventListener('click', function () { F = {}; Object.keys(IDS).forEach(function (k) { el(IDS[k]).value = ''; }); el('cfPeriodo').value = 'todo'; pagina = 0; dibujar(); });
+      c.appendChild(lim);
+    }
+  }
+
+  function dibujar() {
+    var d = filtrado();
+    [dibujarChips, dibujarKpis, dibujarEvol, dibujarRank, dibujarEstados, dibujarComposicion, dibujarVariaciones, dibujarPrecio, dibujarDetalle].forEach(function (fn) {
+      try { fn(d); } catch (e) { console.error(e); aviso('cMensaje', 'Una parte de la pantalla no se pudo dibujar: ' + e.message); }
+    });
+  }
+
+  function tarjeta(cont, et, val, nota, clase) {
+    var t = nuevo('div', 'kpi'); t.appendChild(nuevo('div', 'et', et));
+    t.appendChild(nuevo('div', 'val' + (clase ? ' ' + clase : ''), val));
+    if (nota) t.appendChild(nuevo('div', 'nota', nota));
+    cont.appendChild(t);
+  }
+
+  function dibujarKpis(d) {
+    var k = C.kpis(d.comps), c = el('cKpis'); c.innerHTML = '';
+    tarjeta(c, 'Total comprado', g$(k.total), 'con impuestos, notas de crédito restadas', k.total < 0 ? 'neg' : '');
+    tarjeta(c, 'Neto gravado', g$(k.neto), 'base del IVA');
+    tarjeta(c, 'Exento / no gravado', g$(k.exento));
+    tarjeta(c, 'IVA compras', g$(k.iva), 'crédito fiscal');
+    tarjeta(c, 'Comprobantes', fmtN.format(k.comprobantes), 'promedio ' + g$(k.promedio));
+    tarjeta(c, 'Proveedores', fmtN.format(k.proveedores));
+    tarjeta(c, 'Pendiente de pago', g$(k.pendiente), fmtN.format(k.n_pendiente) + ' comprobantes en estado PEN');
+    tarjeta(c, 'Notas de crédito', g$(k.nc), fmtN.format(k.n_nc) + ' comprobantes', k.nc < 0 ? 'neg' : '');
+    el('cSubDet').textContent = '· ' + fmtN.format(d.comps.length) + ' comprobantes, ' + fmtN.format(d.lineas.length) + ' renglones de artículos';
+  }
+
+  function opcionesBase(extra) {
+    var o = { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#09233A', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, titleColor: COL.texto, bodyColor: COL.claro, bodyFont: { weight: '600' }, padding: 10, displayColors: false } },
+      scales: { x: { grid: { display: false }, ticks: { color: COL.texto, font: { size: 11 } }, border: { color: 'rgba(255,255,255,.12)' } },
+                y: { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 } }, border: { display: false } } } };
+    return Object.assign(o, extra || {});
+  }
+  function cursor(e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; }
+
+  function dibujarEvol(d) {
+    var m = C.porMes(d.comps);
+    var titulos = { total: 'total con impuestos por mes', neto: 'neto gravado por mes', iva: 'IVA compras por mes', comprobantes: 'comprobantes por mes' };
+    el('cSubEvol').textContent = '· ' + titulos[metrica];
+    var valores = m.map(function (x) { return x[metrica]; }), esPlata = metrica !== 'comprobantes';
+    var cfg = { type: 'bar', data: { labels: m.map(function (x) { return mesTxt(x.mes); }), datasets: [{ data: valores, backgroundColor: valores.map(function (v) { return v < 0 ? COL.rojo : COL.azul; }), borderRadius: 4, borderSkipped: false, maxBarThickness: 28 }] },
+      options: opcionesBase({ onHover: cursor, onClick: function (e, act) {
+        if (!act.length) return; var k = m[act[0].index].mes; var fin = new Date(+k.slice(0, 4), +k.slice(5, 7), 0);
+        F.desde = k + '-01'; F.hasta = k + '-' + String(fin.getDate()).padStart(2, '0'); el('cfDesde').value = F.desde; el('cfHasta').value = F.hasta; el('cfPeriodo').value = 'custom'; pagina = 0; dibujar(); } }) };
+    cfg.options.plugins.tooltip.callbacks = { label: function (c) { return esPlata ? g$(c.raw) : fmtN.format(c.raw); } };
+    cfg.options.scales.y.ticks.callback = function (v) { return compacto(v); };
+    if (graf.evol) graf.evol.destroy();
+    graf.evol = new Chart(el('cChEvol'), cfg);
+  }
+
+  function dibujarRank(d) {
+    var r = C.ranking(d.comps, d.lineas, dimRank, 10);
+    el('cAyudaRank').textContent = (dimRank === 'articulo' ? 'Importe neto de los renglones de artículos. ' : 'Total con impuestos. ') + 'Clic en una barra: filtra por ese elemento.';
+    var cfg = { type: 'bar', data: { labels: r.map(function (x) { var s = String(x.nombre); return s.length > 28 ? s.slice(0, 27) + '…' : s; }),
+        datasets: [{ data: r.map(function (x) { return x.valor; }), backgroundColor: r.map(function (x) { return x.clave === null ? 'rgba(124,147,163,.5)' : (x.valor < 0 ? COL.rojo : COL.aqua); }), borderRadius: 4, borderSkipped: false, maxBarThickness: 22 }] },
+      options: opcionesBase({ indexAxis: 'y', onHover: cursor, onClick: function (e, act) {
+        if (!act.length) return; var x = r[act[0].index]; if (x.clave === null) return; ponerFiltro(dimRank, x.clave); } }) };
+    cfg.options.scales.x = { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } };
+    cfg.options.scales.y = { grid: { display: false }, ticks: { color: COL.claro, font: { size: 11.5 } }, border: { color: 'rgba(255,255,255,.12)' } };
+    cfg.options.plugins.tooltip.callbacks = { title: function (c) { return r[c[0].dataIndex].nombre; }, label: function (c) { return g$(c.raw); } };
+    if (graf.rank) graf.rank.destroy();
+    graf.rank = new Chart(el('cChRank'), cfg);
+  }
+
+  function tablaGrupos(tbId, filas, nombreFn, filtro) {
+    var tb = el(tbId); tb.innerHTML = '';
+    filas.forEach(function (g) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar';
+      tr.appendChild(nuevo('td', null, nombreFn(g.clave))); tr.appendChild(nuevo('td', 'num', fmtN.format(g.comprobantes)));
+      tr.appendChild(nuevo('td', 'num' + (g.total < 0 ? ' neg' : ''), g$(g.total))); tr.appendChild(nuevo('td', 'num', g.pct == null ? '—' : fmtD.format(g.pct) + ' %'));
+      tr.addEventListener('click', function () { ponerFiltro(filtro, g.clave); });
+      tb.appendChild(tr);
+    });
+    if (!filas.length) { var tr0 = nuevo('tr'); var td = nuevo('td', 'gris', 'Sin datos para estos filtros.'); td.colSpan = 4; tr0.appendChild(td); tb.appendChild(tr0); }
+  }
+  function dibujarEstados(d) {
+    tablaGrupos('cTablaEstado', C.agrupar(d.comps, 'estado'), C.nombreEstado, 'estado');
+    tablaGrupos('cTablaTipo', C.agrupar(d.comps, 't_comp'), C.nombreTipo, 'tipo');
+  }
+
+  function dibujarComposicion(d) {
+    var k = C.kpis(d.comps), c = el('cComposicion'); c.innerHTML = '';
+    var partes = [['Neto gravado', k.neto], ['Exento / no gravado', k.exento], ['IVA', k.iva], ['Otros impuestos y percepciones', k.otros]];
+    var abs = partes.reduce(function (s, p) { return s + Math.abs(p[1]); }, 0);
+    partes.forEach(function (p) {
+      var b = nuevo('div', 'comp-barra'), f = nuevo('div', 'fila');
+      var pc = abs ? Math.abs(p[1]) / abs * 100 : 0;
+      f.appendChild(nuevo('span', null, p[0])); f.appendChild(nuevo('span', null, g$(p[1]) + ' · ' + fmtD.format(Math.round(pc * 10) / 10) + ' %'));
+      var riel = nuevo('div', 'riel'), rel = nuevo('div', 'relleno'); rel.style.width = pc.toFixed(1) + '%'; riel.appendChild(rel);
+      b.appendChild(f); b.appendChild(riel); c.appendChild(b);
+    });
+    var t = nuevo('div', 'ayuda', 'Total = neto gravado + exento + IVA + otros = ' + g$(k.total) + '. "Otros" es la diferencia entre el total del comprobante y esas partes (percepciones, impuestos internos, etc.).');
+    c.appendChild(t);
+  }
+
+  function dibujarVariaciones(d) {
+    var v = C.variaciones(d.lineas), tb = el('cTablaVar'); tb.innerHTML = '';
+    if (!artSel || !v.some(function (x) { return x.cod_articu === artSel; })) artSel = v.length ? v.slice().sort(function (a, b) { return b.compras - a.compras; })[0].cod_articu : null;   // por defecto: el artículo más comprado
+    v.forEach(function (x) {
+      var tr = nuevo('tr', 'clic' + (x.cod_articu === artSel ? ' sel' : '')); tr.title = 'Ver su precio en el gráfico';
+      tr.appendChild(nuevo('td', null, x.articulo)); tr.appendChild(nuevo('td', 'num', fmtN.format(x.compras)));
+      tr.appendChild(nuevo('td', 'num', fmt$2.format(x.primero))); tr.appendChild(nuevo('td', 'num', fmt$2.format(x.ultimo)));
+      var raro = x.compras > 1 && Math.abs(x.variacion_pct) >= C.SALTO_RARO;
+      var tdv = nuevo('td', 'num ' + (x.variacion_pct > 0 ? 'sube' : x.variacion_pct < 0 ? 'baja' : ''), x.compras > 1 ? (raro ? '⚠ ' : '') + pct(x.variacion_pct) : 'una sola compra');
+      if (raro) tdv.title = 'Salto de precio muy grande: revisar ese comprobante en Tango (moneda, unidad o carga).';
+      tr.appendChild(tdv);
+      tr.addEventListener('click', function () { artSel = x.cod_articu; dibujarVariaciones(filtrado()); dibujarPrecio(filtrado()); });
+      tb.appendChild(tr);
+    });
+    if (!v.length) { var tr0 = nuevo('tr'); var td = nuevo('td', 'gris', 'Sin renglones de artículos para estos filtros.'); td.colSpan = 5; tr0.appendChild(td); tb.appendChild(tr0); }
+  }
+
+  function dibujarPrecio(d) {
+    var p = artSel ? C.precios(d.lineas, artSel) : { historial: [], compras: 0 }, res = el('cPrecioRes'); res.innerHTML = '';
+    var nombre = ''; d.lineas.some(function (l) { if (l.cod_articu === artSel) { nombre = l.articulo + ' (' + l.cod_articu + ')'; return true; } });
+    el('cSubPrecio').textContent = nombre ? '· ' + nombre : '';
+    if (p.compras) {
+      [['Compras', fmtN.format(p.compras)], ['Primer precio', fmt$2.format(p.primero)], ['Último precio', fmt$2.format(p.ultimo)], ['Variación', pct(p.variacion_pct)],
+       ['Mínimo', fmt$2.format(p.minimo)], ['Máximo', fmt$2.format(p.maximo)], ['Promedio ponderado', p.promedio == null ? '—' : fmt$2.format(p.promedio)]].forEach(function (x) {
+        var dv = nuevo('div', null, x[0]); dv.appendChild(nuevo('b', null, x[1])); res.appendChild(dv); });
+    }
+    el('cPrecioAviso').innerHTML = '';
+    if (p.compras > 1 && Math.abs(p.variacion_pct) >= C.SALTO_RARO)
+      el('cPrecioAviso').appendChild(nuevo('div', 'aviso-costo', '⚠ El precio cambia más de ' + fmtN.format(C.SALTO_RARO) + ' % entre la primera y la última compra. Es el dato que tiene Tango; conviene revisar esos comprobantes (moneda, unidad o carga) antes de sacar conclusiones.'));
+    var h = p.historial;
+    var cfg = { type: 'line', data: { labels: h.map(function (x) { return fechaTxt(x.fecha); }), datasets: [{ data: h.map(function (x) { return x.precio; }), borderColor: COL.naranja, backgroundColor: COL.naranja, pointRadius: 4, pointHoverRadius: 6, tension: 0, borderWidth: 2 }] },
+      options: opcionesBase() };
+    cfg.options.plugins.tooltip.callbacks = { label: function (c) { var x = h[c.dataIndex]; return [fmt$2.format(x.precio) + ' × ' + fmtD.format(x.cantidad), x.proveedor, 'Comp. ' + x.n_comp]; } };
+    cfg.options.scales.y.ticks.callback = function (v) { return compacto(v); };
+    if (graf.precio) graf.precio.destroy();
+    graf.precio = new Chart(el('cChPrecio'), cfg);
+  }
+
+  var COLS = {
+    comp: [['fecha', 'Fecha'], ['tipo', 'Tipo'], ['n_comp', 'Número'], ['proveedor', 'Proveedor'], ['provincia', 'Provincia'], ['estado', 'Estado'],
+      ['neto', 'Neto gravado', 1], ['exento', 'Exento', 1], ['iva', 'IVA', 1], ['otros', 'Otros', 1], ['total', 'Total', 1]],
+    lin: [['fecha', 'Fecha'], ['tipo', 'Tipo'], ['n_comp', 'Número'], ['proveedor', 'Proveedor'], ['articulo', 'Artículo'],
+      ['cantidad', 'Cant.', 1], ['precio_unitario', 'Precio unit.', 1], ['importe', 'Importe neto', 1]]
+  };
+
+  function dibujarDetalle(d) {
+    var cols = COLS[vista], cab = el('cCabDet'); cab.innerHTML = '';
+    cols.forEach(function (c) {
+      var th = nuevo('th', 'ord' + (c[2] ? ' num' : ''), c[1] + (orden.col === c[0] ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''));
+      th.addEventListener('click', function () { if (orden.col === c[0]) orden.dir = -orden.dir; else { orden.col = c[0]; orden.dir = c[2] ? -1 : 1; } dibujarDetalle(filtrado()); });
+      cab.appendChild(th);
+    });
+    var numerica = cols.some(function (c) { return c[0] === orden.col && c[2]; });
+    var filas = (vista === 'comp' ? d.comps : d.lineas).map(function (x) {
+      var o = Object.assign({}, x); o.tipo = C.nombreTipo(x.t_comp);
+      if (vista === 'comp') o.otros = Math.round(((+x.total) - (+x.neto) - (+x.exento) - (+x.iva)) * 100) / 100;
+      return o; });
+    filas.sort(function (a, b) {
+      var x = a[orden.col], y = b[orden.col];
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      return (numerica ? (+x - +y) : String(x).localeCompare(String(y))) * orden.dir;
+    });
+    var paginas = Math.max(1, Math.ceil(filas.length / POR_PAG)); if (pagina >= paginas) pagina = paginas - 1;
+    var tb = el('cTablaDet'); tb.innerHTML = '';
+    filas.slice(pagina * POR_PAG, (pagina + 1) * POR_PAG).forEach(function (x) {
+      var tr = nuevo('tr');
+      tr.appendChild(nuevo('td', null, fechaTxt(x.fecha))); tr.appendChild(nuevo('td', null, x.tipo)); tr.appendChild(nuevo('td', null, x.n_comp));
+      var tdp = nuevo('td', 'clic', x.proveedor); tdp.title = 'Filtrar este proveedor'; tdp.addEventListener('click', function () { ponerFiltro('proveedor', x.cod_provee); }); tr.appendChild(tdp);
+      if (vista === 'comp') {
+        tr.appendChild(nuevo('td', null, x.provincia)); tr.appendChild(nuevo('td', null, x.estado));
+        ['neto', 'exento', 'iva', 'otros', 'total'].forEach(function (k) { tr.appendChild(nuevo('td', 'num' + (+x[k] < 0 ? ' neg' : ''), g$(+x[k]))); });
+      } else {
+        var tda = nuevo('td', 'clic', x.articulo); tda.title = 'Filtrar este artículo'; tda.addEventListener('click', function () { ponerFiltro('articulo', x.cod_articu); }); tr.appendChild(tda);
+        tr.appendChild(nuevo('td', 'num', fmtD.format(x.cantidad))); tr.appendChild(nuevo('td', 'num', x.precio_unitario == null ? '—' : fmt$2.format(x.precio_unitario)));
+        tr.appendChild(nuevo('td', 'num' + (+x.importe < 0 ? ' neg' : ''), g$(+x.importe)));
+      }
+      tb.appendChild(tr);
+    });
+    if (!filas.length) { var tr0 = nuevo('tr'); var td = nuevo('td', 'gris', 'Sin datos para estos filtros.'); td.colSpan = cols.length; tr0.appendChild(td); tb.appendChild(tr0); }
+    el('cPagInfo').textContent = filas.length ? 'Mostrando ' + (pagina * POR_PAG + 1) + '–' + Math.min(filas.length, (pagina + 1) * POR_PAG) + ' de ' + fmtN.format(filas.length) + ' · página ' + (pagina + 1) + ' de ' + paginas : '';
+    el('cPagAnt').disabled = pagina === 0; el('cPagSig').disabled = pagina >= paginas - 1;
+  }
+
+  function descargarCsv() {
+    var d = filtrado();
+    var cab = vista === 'comp'
+      ? ['fecha', 't_comp', 'n_comp', 'estado', 'cod_provee', 'proveedor', 'provincia', 'neto', 'exento', 'iva', 'total']
+      : ['fecha', 't_comp', 'n_comp', 'cod_provee', 'proveedor', 'cod_articu', 'articulo', 'cantidad', 'precio_unitario', 'importe'];
+    var esc = function (v) { v = v == null ? '' : String(v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var src = vista === 'comp' ? d.comps : d.lineas;
+    var txt = cab.join(';') + '\n' + src.map(function (x) { return cab.map(function (c) { return esc(x[c]); }).join(';'); }).join('\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + txt], { type: 'text/csv;charset=utf-8' }));
+    a.download = vista === 'comp' ? 'compras_comprobantes_empresa_ejemplo.csv' : 'compras_articulos_empresa_ejemplo.csv'; document.body.appendChild(a); a.click(); a.remove();
+  }
+})();
+</script>

@@ -1,0 +1,380 @@
+<!-- ============ MODULO IVA ============ -->
+<!-- Usa los estilos comunes de pantalla que define el módulo Ventas (y .kpis.s8 / .etq de Stock); acá solo van los propios. -->
+<style>
+  .i-aviso { font-size:12px; color:var(--amber); margin:0 0 12px; line-height:1.5; }
+  .i-nota { font-size:12px; color:var(--gray); margin:0 0 12px; line-height:1.5; }
+</style>
+
+<section class="modulo" id="modIVA">
+  <div class="filtros">
+    <div class="fila-filtros">
+      <div class="filtro"><label for="ifPeriodo">Período</label><select id="ifPeriodo"></select></div>
+      <div class="filtro"><label for="ifDesde">Desde</label><input type="date" id="ifDesde"></div>
+      <div class="filtro"><label for="ifHasta">Hasta</label><input type="date" id="ifHasta"></div>
+      <div class="filtro"><label for="ifLibro">Libro</label>
+        <select id="ifLibro"><option value="">Ventas y compras</option><option value="ventas">Solo ventas (débito)</option><option value="compras">Solo compras (crédito)</option></select></div>
+      <div class="filtro"><label for="ifTipo">Tipo de comprobante</label><select id="ifTipo"></select></div>
+      <div class="filtro"><label for="ifCuit">CUIT</label>
+        <select id="ifCuit"><option value="">Todos</option><option value="sin">Sin CUIT</option><option value="con">Con CUIT</option></select></div>
+      <div class="filtro ancho"><label for="ifTexto">Buscar</label><input type="text" id="ifTexto" placeholder="Cliente, proveedor, CUIT, número…"></div>
+    </div>
+    <div class="chips" id="iChips"></div>
+  </div>
+
+  <div id="iMensaje" class="mensaje oculto"></div>
+  <div id="iCuerpo">
+    <div class="i-nota">Débito fiscal: IVA de los comprobantes de venta. Crédito fiscal: IVA de los comprobantes de compra. Las notas de crédito restan. Saldo = débito − crédito (positivo: a pagar; negativo: a favor). No incluye saldos a favor de períodos anteriores, retenciones ni percepciones sufridas: es la posición según los comprobantes.</div>
+    <div class="i-aviso" id="iAviso"></div>
+    <div class="kpis s8" id="iKpis"></div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Posición de IVA <span class="sub" id="iSubPer"></span></span>
+          <span class="tabs" id="iTabsPer"><button data-p="mes" class="on">Por mes</button><button data-p="anio">Por año</button><button data-p="acum">Saldo acumulado</button></span></h3>
+        <div class="lienzo"><canvas id="iChPer" aria-label="Posición de IVA"></canvas></div>
+        <div class="ayuda">Clic en una barra: filtra ese período.</div>
+      </div>
+      <div class="panel">
+        <h3><span>Ranking <span class="sub">top 10</span></span>
+          <span class="tabs" id="iTabsRank"><button data-r="clientes" class="on">Clientes (débito)</button><button data-r="proveedores">Proveedores (crédito)</button><button data-r="alicuotas">Alícuotas de compras</button></span></h3>
+        <div class="lienzo alto"><canvas id="iChRank" aria-label="Ranking de IVA"></canvas></div>
+        <div class="ayuda" id="iAyudaRank"></div>
+      </div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3>Por año</h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Año</th><th class="num">Débito</th><th class="num">Crédito</th><th class="num">Saldo</th><th class="num">Neto vendido</th><th class="num">Neto comprado</th></tr></thead>
+          <tbody id="iTablaAnio"></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h3>Por tipo de comprobante <span class="sub">en el período</span></h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Libro</th><th>Tipo</th><th class="num">Cant.</th><th class="num">Neto</th><th class="num">IVA</th></tr></thead>
+          <tbody id="iTablaTipo"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><span>Detalle <span class="sub" id="iSubDet"></span></span>
+        <span><span class="tabs" id="iTabsDet"><button data-v="ventas" class="on">Libro IVA ventas</button><button data-v="compras">Libro IVA compras</button></span>
+        <button class="btn secundario chico" id="iBtnCsv">Descargar CSV</button></span></h3>
+      <div class="tabla-scroll"><table>
+        <thead><tr id="iCabDet"></tr></thead>
+        <tbody id="iTablaDet"></tbody></table></div>
+      <div class="pie-tabla"><span id="iPagInfo"></span>
+        <span><button class="btn secundario chico" id="iPagAnt">‹ Anterior</button> <button class="btn secundario chico" id="iPagSig">Siguiente ›</button></span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Lógica pura. ventas = api_iva_ventas_v2; compras = api_iva_compras_v2 (importes ya con signo: las notas de crédito restan).
+  // ---------------------------------------------------------------------------
+  var I = window.IvaLogica = {};
+  function r2(x) { return Math.round(x * 100) / 100; }
+  I.tieneCuit = function (x) { return !!String(x.cuit || '').replace(/[^0-9]/g, '').replace(/^0+$/, ''); };
+  I.nombre = function (x) { return x.cliente || x.proveedor || x.cod_client || x.cod_provee || 'Sin nombre'; };
+
+  // lado: 'ventas' | 'compras'. f.libro deja pasar solo un lado.
+  I.filtrar = function (rows, f, lado) {
+    if (f.libro && f.libro !== lado) return [];
+    var txt = (f.texto || '').trim().toLowerCase();
+    return rows.filter(function (x) {
+      if (f.desde && x.fecha < f.desde) return false;
+      if (f.hasta && x.fecha > f.hasta) return false;
+      if (f.tipo && (lado + ':' + x.t_comp) !== f.tipo) return false;
+      if (f.cuit === 'sin' && I.tieneCuit(x)) return false;
+      if (f.cuit === 'con' && !I.tieneCuit(x)) return false;
+      if (txt && [x.cliente, x.proveedor, x.cod_client, x.cod_provee, x.cuit, x.n_comp, x.tipo, x.t_comp].join(' ').toLowerCase().indexOf(txt) < 0) return false;
+      return true;
+    });
+  };
+
+  I.kpis = function (v, c) {
+    var k = { debito: 0, credito: 0, neto_v: 0, exento_v: 0, neto_c: 0, exento_c: 0, otros_c: 0, n_v: v.length, n_c: c.length, sin_cuit: 0, notas_v: 0 };
+    v.forEach(function (x) { k.debito += +x.iva; k.neto_v += +x.gravado; k.exento_v += +x.exento; if (!I.tieneCuit(x)) k.sin_cuit++; if (+x.signo < 0) k.notas_v += +x.iva; });
+    c.forEach(function (x) { k.credito += +x.iva; k.neto_c += +x.neto; k.exento_c += +x.exento; k.otros_c += +x.otros; });
+    ['debito', 'credito', 'neto_v', 'exento_v', 'neto_c', 'exento_c', 'otros_c', 'notas_v'].forEach(function (x) { k[x] = r2(k[x]); });
+    k.saldo = r2(k.debito - k.credito);
+    return k;
+  };
+
+  // por: 'mes' | 'anio'. Débito, crédito y saldo por período (con los neto gravados).
+  I.porPeriodo = function (v, c, por) {
+    var g = {};
+    function clave(x) { return por === 'anio' ? x.fecha.slice(0, 4) : x.fecha.slice(0, 7); }
+    function fila(k) { if (!g[k]) g[k] = { clave: k, debito: 0, credito: 0, neto_v: 0, neto_c: 0 }; return g[k]; }
+    v.forEach(function (x) { var q = fila(clave(x)); q.debito += +x.iva; q.neto_v += +x.gravado; });
+    c.forEach(function (x) { var q = fila(clave(x)); q.credito += +x.iva; q.neto_c += +x.neto; });
+    return Object.keys(g).sort().map(function (k) { var q = g[k]; q.debito = r2(q.debito); q.credito = r2(q.credito); q.neto_v = r2(q.neto_v); q.neto_c = r2(q.neto_c); q.saldo = r2(q.debito - q.credito); return q; });
+  };
+
+  I.acumulado = function (meses) { var a = 0; return meses.map(function (m) { a += m.saldo; return { clave: m.clave, acumulado: r2(a) }; }); };
+
+  // Ranking de terceros por IVA (clientes en ventas, proveedores en compras).
+  I.terceros = function (rows, n) {
+    var g = {};
+    rows.forEach(function (x) { var k = x.cod_client || x.cod_provee || I.nombre(x); if (!g[k]) g[k] = { clave: k, nombre: I.nombre(x), valor: 0 }; g[k].valor += +x.iva; });
+    var arr = Object.keys(g).map(function (k) { g[k].valor = r2(g[k].valor); return g[k]; }).filter(function (x) { return x.valor !== 0; }).sort(function (a, b) { return b.valor - a.valor; });
+    if (arr.length > n) { var resto = arr.slice(n).reduce(function (t, x) { return t + x.valor; }, 0), tot = arr.length; arr = arr.slice(0, n); arr.push({ clave: null, nombre: 'Otros (' + (tot - n) + ')', valor: r2(resto) }); }
+    return arr;
+  };
+
+  I.alicuotas = function (c) {
+    var a = { '21 %': 0, '10,5 %': 0, '27 %': 0, 'Otras': 0 };
+    c.forEach(function (x) { a['21 %'] += +x.iva_21; a['10,5 %'] += +x.iva_105; a['27 %'] += +x.iva_27; a['Otras'] += +x.iva_otras; });
+    return Object.keys(a).map(function (k) { return { clave: k, nombre: k, valor: r2(a[k]) }; }).filter(function (x) { return x.valor !== 0; });
+  };
+
+  I.porTipo = function (v, c) {
+    var g = {};
+    function sumar(lado, x, neto) { var k = lado + ':' + x.t_comp; if (!g[k]) g[k] = { clave: k, libro: lado === 'ventas' ? 'Ventas' : 'Compras', tipo: x.tipo || x.t_comp, cantidad: 0, neto: 0, iva: 0 }; g[k].cantidad++; g[k].neto += neto; g[k].iva += +x.iva; }
+    v.forEach(function (x) { sumar('ventas', x, +x.gravado); });
+    c.forEach(function (x) { sumar('compras', x, +x.neto); });
+    return Object.keys(g).map(function (k) { var x = g[k]; x.neto = r2(x.neto); x.iva = r2(x.iva); return x; }).sort(function (a, b) { return a.libro < b.libro ? 1 : a.libro > b.libro ? -1 : b.cantidad - a.cantidad; });
+  };
+
+  if (typeof window.document === 'undefined') return;
+
+  // ---------------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------------
+  var VEN = null, COM = null, F = {}, graf = {}, por = 'mes', rank = 'clientes', vista = 'ventas', MIN = null, MAX = null;
+  var orden = { col: 'fecha', dir: -1 }, pagina = 0, POR_PAG = 25;
+  var COL = { azul: '#3987e5', naranja: '#d95926', aqua: '#199e70', grilla: 'rgba(255,255,255,0.07)', texto: '#7C93A3', claro: '#F2F5F3' };
+  var fmt$ = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+  var fmt$2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 });
+  var fmtN = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  var fmtD = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
+  function g$(x) { return x == null ? '—' : fmt$.format(x); }
+  function el(id) { return document.getElementById(id); }
+  function fechaTxt(s) { if (!s) return '—'; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function mesTxt(k) { var n = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return n[+k.slice(5, 7) - 1] + ' ' + k.slice(2, 4); }
+  function nuevo(tag, clase, texto) { var e = document.createElement(tag); if (clase) e.className = clase; if (texto != null) e.textContent = texto; return e; }
+  function compacto(v) { var a = Math.abs(v); if (a >= 1e6) return fmtD.format(v / 1e6) + ' M'; if (a >= 1e3) return fmtN.format(v / 1e3) + ' mil'; return fmtN.format(v); }
+
+  window.MODULOS = window.MODULOS || {};
+  window.MODULOS.IVA = { titulo: 'IVA', cargar: cargar };
+
+  function cargar() {
+    if (VEN) { dibujar(); return; }
+    el('iCuerpo').classList.add('cargando-suave');
+    Promise.all([sb.rpc('api_iva_ventas_v2', {}), sb.rpc('api_iva_compras_v2', {})]).then(function (rs) {
+      el('iCuerpo').classList.remove('cargando-suave');
+      var err = rs.map(function (r) { return r.error; }).filter(Boolean)[0];
+      if (err) { aviso('iMensaje', 'No se pudo leer IVA: ' + textoError(err)); return; }
+      VEN = (rs[0].data || []).map(function (x) { x.fecha = String(x.fecha).slice(0, 10); return x; });
+      COM = (rs[1].data || []).map(function (x) { x.fecha = String(x.fecha).slice(0, 10); return x; });
+      armarFiltros(); dibujar();
+    }).catch(function (e) { el('iCuerpo').classList.remove('cargando-suave'); aviso('iMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  var IDS = { desde: 'ifDesde', hasta: 'ifHasta', libro: 'ifLibro', tipo: 'ifTipo', cuit: 'ifCuit', texto: 'ifTexto' };
+  function opciones(sel, pares, todos) { sel.innerHTML = ''; sel.appendChild(new Option(todos, '')); pares.forEach(function (p) { sel.appendChild(new Option(p[1], p[0])); }); }
+
+  function armarFiltros() {
+    var fechas = VEN.concat(COM).map(function (x) { return x.fecha; }).sort(); MIN = fechas[0]; MAX = fechas[fechas.length - 1];
+    el('ifDesde').min = el('ifHasta').min = MIN; el('ifDesde').max = el('ifHasta').max = MAX;
+    var anios = {}; fechas.forEach(function (f) { anios[f.slice(0, 4)] = 1; });
+    var per = [['todo', 'Todo (' + fechaTxt(MIN) + ' al ' + fechaTxt(MAX) + ')']];
+    Object.keys(anios).sort().reverse().forEach(function (a) { per.push(['a' + a, 'Año ' + a]); }); per.push(['custom', 'Personalizado']);
+    var sp = el('ifPeriodo'); sp.innerHTML = ''; per.forEach(function (p) { sp.appendChild(new Option(p[1], p[0])); });
+    var tipos = {}; VEN.forEach(function (x) { tipos['ventas:' + x.t_comp] = 'Ventas · ' + x.tipo + ' (' + x.t_comp + ')'; }); COM.forEach(function (x) { tipos['compras:' + x.t_comp] = 'Compras · ' + x.t_comp; });
+    opciones(el('ifTipo'), Object.keys(tipos).sort().map(function (k) { return [k, tipos[k]]; }), 'Todos');
+
+    var sinCuit = VEN.filter(function (x) { return !I.tieneCuit(x); }).length;
+    var desp = VEN.filter(function (x) { return x.fecha > '2024-06-21'; }).length;
+    el('iAviso').textContent = '⚠ No hay comprobantes de AFIP cargados: el cruce contra "Mis Comprobantes" no se puede hacer todavía. '
+      + (sinCuit ? sinCuit + ' de ' + VEN.length + ' comprobantes de venta no tienen CUIT del cliente. ' : '')
+      + (desp ? desp + ' comprobantes de venta son posteriores al corte recomendado (21/06/2024).' : '');
+
+    sp.addEventListener('change', function () {
+      var v = sp.value, d = null, h = null;
+      if (v.charAt(0) === 'a') { d = v.slice(1) + '-01-01'; h = v.slice(1) + '-12-31'; } else if (v === 'custom') { return; }
+      F.desde = d; F.hasta = h; el('ifDesde').value = d || ''; el('ifHasta').value = h || ''; pagina = 0; dibujar();
+    });
+    ['desde', 'hasta'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; el('ifPeriodo').value = 'custom'; pagina = 0; dibujar(); }); });
+    ['libro', 'tipo', 'cuit'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; pagina = 0; dibujar(); }); });
+    var t = null; el('ifTexto').addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { F.texto = el('ifTexto').value; pagina = 0; dibujar(); }, 250); });
+    el('iTabsPer').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; por = b.dataset.p; marcarTab('iTabsPer', b); dibujarPer(datos()); });
+    el('iTabsRank').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; rank = b.dataset.r; marcarTab('iTabsRank', b); dibujarRank(datos()); });
+    el('iTabsDet').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; vista = b.dataset.v; orden = { col: 'fecha', dir: -1 }; pagina = 0; marcarTab('iTabsDet', b); dibujarDetalle(datos()); });
+    el('iPagAnt').addEventListener('click', function () { if (pagina > 0) { pagina--; dibujarDetalle(datos()); } });
+    el('iPagSig').addEventListener('click', function () { pagina++; dibujarDetalle(datos()); });
+    el('iBtnCsv').addEventListener('click', descargarCsv);
+  }
+  function marcarTab(id, b) { el(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); }
+
+  function datos() { return { v: I.filtrar(VEN, F, 'ventas'), c: I.filtrar(COM, F, 'compras') }; }
+  function ponerFiltro(k, v) { F[k] = v; pagina = 0; if (IDS[k]) el(IDS[k]).value = v || ''; dibujar(); }
+  function filtrarFechas(d, h) { F.desde = d; F.hasta = h; el('ifDesde').value = d; el('ifHasta').value = h; el('ifPeriodo').value = (d.slice(5) === '01-01' && h.slice(5) === '12-31' && el('ifPeriodo').querySelector('option[value="a' + d.slice(0, 4) + '"]')) ? 'a' + d.slice(0, 4) : 'custom'; pagina = 0; dibujar(); }
+
+  function dibujarChips() {
+    var c = el('iChips'); c.innerHTML = '';
+    var nombres = { desde: 'Desde', hasta: 'Hasta', libro: 'Libro', tipo: 'Tipo', cuit: 'CUIT', texto: 'Buscar' };
+    var hay = false;
+    Object.keys(nombres).forEach(function (k) {
+      if (!F[k]) return; hay = true;
+      var v = F[k], s = el(IDS[k]);
+      if (s.tagName === 'SELECT' && s.options[s.selectedIndex]) v = s.options[s.selectedIndex].text;
+      if (k === 'desde' || k === 'hasta') v = fechaTxt(v);
+      var ch = nuevo('span', 'chip-f', nombres[k] + ': ' + v), x = nuevo('button', null, '×'); x.title = 'Quitar';
+      x.addEventListener('click', function () { F[k] = null; el(IDS[k]).value = ''; if (k === 'desde' || k === 'hasta') el('ifPeriodo').value = 'custom'; pagina = 0; dibujar(); });
+      ch.appendChild(x); c.appendChild(ch);
+    });
+    if (hay) { var lim = nuevo('button', 'btn secundario chico', 'Limpiar todo');
+      lim.addEventListener('click', function () { F = {}; Object.keys(IDS).forEach(function (k) { el(IDS[k]).value = ''; }); el('ifPeriodo').value = 'todo'; pagina = 0; dibujar(); }); c.appendChild(lim); }
+  }
+
+  function dibujar() {
+    var d = datos();
+    [dibujarChips, dibujarKpis, dibujarPer, dibujarRank, dibujarTablas, dibujarDetalle].forEach(function (fn) {
+      try { fn(d); } catch (e) { console.error(e); aviso('iMensaje', 'Una parte de la pantalla no se pudo dibujar: ' + e.message); }
+    });
+  }
+
+  function tarjeta(cont, et, val, nota, clase, alClic) {
+    var t = nuevo('div', 'kpi'); t.appendChild(nuevo('div', 'et', et)); t.appendChild(nuevo('div', 'val' + (clase ? ' ' + clase : ''), val));
+    if (nota) t.appendChild(nuevo('div', 'nota', nota));
+    if (alClic) { t.style.cursor = 'pointer'; t.addEventListener('click', alClic); }
+    cont.appendChild(t);
+  }
+
+  function dibujarKpis(d) {
+    var k = I.kpis(d.v, d.c), c = el('iKpis'); c.innerHTML = '';
+    tarjeta(c, 'Débito fiscal', g$(k.debito), 'IVA de ventas' + (k.notas_v ? ' (notas de crédito ' + g$(k.notas_v) + ')' : ''), null, function () { ponerFiltro('libro', 'ventas'); });
+    tarjeta(c, 'Crédito fiscal', g$(k.credito), 'IVA de compras', null, function () { ponerFiltro('libro', 'compras'); });
+    tarjeta(c, k.saldo >= 0 ? 'Saldo a pagar' : 'Saldo a favor', g$(Math.abs(k.saldo)), 'débito − crédito del período', k.saldo < 0 ? '' : 'neg');
+    tarjeta(c, 'Neto vendido gravado', g$(k.neto_v), k.exento_v ? 'más exento ' + g$(k.exento_v) : null);
+    tarjeta(c, 'Neto comprado gravado', g$(k.neto_c), k.exento_c ? 'más exento ' + g$(k.exento_c) : null);
+    tarjeta(c, 'Percepciones y otros', g$(k.otros_c), 'en compras: no es IVA, se muestra aparte');
+    tarjeta(c, 'Comprobantes', fmtN.format(k.n_v + k.n_c), fmtN.format(k.n_v) + ' de venta, ' + fmtN.format(k.n_c) + ' de compra');
+    tarjeta(c, 'Ventas sin CUIT', fmtN.format(k.sin_cuit), 'clic para verlas', k.sin_cuit ? 'neg' : '', function () { F.libro = 'ventas'; el('ifLibro').value = 'ventas'; ponerFiltro('cuit', 'sin'); });
+    el('iSubDet').textContent = '· ' + fmtN.format(d.v.length) + ' de venta, ' + fmtN.format(d.c.length) + ' de compra';
+  }
+
+  function opcionesBase(extra) {
+    var o = { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+      plugins: { legend: { display: true, position: 'top', align: 'end', labels: { color: COL.claro, boxWidth: 10, boxHeight: 10, font: { size: 11.5 } } },
+        tooltip: { backgroundColor: '#09233A', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, titleColor: COL.texto, bodyColor: COL.claro, bodyFont: { weight: '600' }, padding: 10, displayColors: true, callbacks: { label: function (c) { return (c.dataset.label ? c.dataset.label + ': ' : '') + fmt$2.format(c.raw); } } } },
+      scales: { x: { grid: { display: false }, ticks: { color: COL.texto, font: { size: 11 } }, border: { color: 'rgba(255,255,255,.12)' } },
+                y: { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } } } };
+    return Object.assign(o, extra || {});
+  }
+  function cursor(e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; }
+
+  function dibujarPer(d) {
+    var p = I.porPeriodo(d.v, d.c, por === 'anio' ? 'anio' : 'mes'), cfg;
+    var etq = p.map(function (x) { return por === 'anio' ? x.clave : mesTxt(x.clave); });
+    function clic(e, act) { if (!act.length) return; var k = p[act[0].index].clave; if (k.length === 4) filtrarFechas(k + '-01-01', k + '-12-31'); else { var fin = new Date(+k.slice(0, 4), +k.slice(5, 7), 0); filtrarFechas(k + '-01', k + '-' + String(fin.getDate()).padStart(2, '0')); } }
+    if (por === 'acum') {
+      var a = I.acumulado(p);
+      el('iSubPer').textContent = '· suma del saldo mes a mes';
+      cfg = { type: 'line', data: { labels: etq, datasets: [{ label: 'Saldo acumulado', data: a.map(function (x) { return x.acumulado; }), borderColor: COL.aqua, backgroundColor: COL.aqua, pointRadius: 2, borderWidth: 2, tension: 0 }] }, options: opcionesBase({ onHover: cursor, onClick: clic }) };
+    } else {
+      el('iSubPer').textContent = por === 'anio' ? '· por año' : '· por mes';
+      cfg = { type: 'bar', data: { labels: etq, datasets: [
+          { label: 'Débito', data: p.map(function (x) { return x.debito; }), backgroundColor: COL.azul, borderRadius: 3, maxBarThickness: 18 },
+          { label: 'Crédito', data: p.map(function (x) { return x.credito; }), backgroundColor: COL.naranja, borderRadius: 3, maxBarThickness: 18 }] },
+        options: opcionesBase({ onHover: cursor, onClick: clic }) };
+      cfg.options.plugins.tooltip.callbacks.footer = function (c) { var x = p[c[0].dataIndex]; return 'Saldo: ' + fmt$2.format(x.saldo); };
+    }
+    if (graf.per) graf.per.destroy();
+    graf.per = new Chart(el('iChPer'), cfg);
+  }
+
+  function dibujarRank(d) {
+    var r, ayuda;
+    if (rank === 'alicuotas') { r = I.alicuotas(d.c); ayuda = 'Crédito fiscal de compras según la alícuota.'; }
+    else if (rank === 'proveedores') { r = I.terceros(d.c, 10); ayuda = 'Proveedores con más crédito fiscal. Clic en una barra: busca ese proveedor.'; }
+    else { r = I.terceros(d.v, 10); ayuda = 'Clientes con más débito fiscal. Clic en una barra: busca ese cliente.'; }
+    el('iAyudaRank').textContent = ayuda;
+    var color = rank === 'clientes' ? COL.azul : rank === 'proveedores' ? COL.naranja : COL.aqua;
+    var cfg = { type: 'bar', data: { labels: r.map(function (x) { var s = String(x.nombre); return s.length > 28 ? s.slice(0, 27) + '…' : s; }),
+        datasets: [{ label: '', data: r.map(function (x) { return x.valor; }), backgroundColor: r.map(function (x) { return x.clave === null ? 'rgba(124,147,163,.5)' : color; }), borderRadius: 4, borderSkipped: false, maxBarThickness: 22 }] },
+      options: opcionesBase({ indexAxis: 'y', onHover: cursor, onClick: function (e, act) { if (!act.length || rank === 'alicuotas') return; var x = r[act[0].index]; if (x.clave === null) return; F.libro = rank === 'clientes' ? 'ventas' : 'compras'; el('ifLibro').value = F.libro; ponerFiltro('texto', x.nombre); } }) };
+    cfg.options.plugins.legend = { display: false };
+    cfg.options.scales.x = { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } };
+    cfg.options.scales.y = { grid: { display: false }, ticks: { color: COL.claro, font: { size: 11.5 } }, border: { color: 'rgba(255,255,255,.12)' } };
+    cfg.options.plugins.tooltip.callbacks.title = function (c) { return r[c[0].dataIndex].nombre; };
+    if (graf.rank) graf.rank.destroy();
+    graf.rank = new Chart(el('iChRank'), cfg);
+  }
+
+  function vacia(tb, n) { if (!tb.children.length) { var tr = nuevo('tr'), td = nuevo('td', 'gris', 'Sin datos para estos filtros.'); td.colSpan = n; tr.appendChild(td); tb.appendChild(tr); } }
+
+  function dibujarTablas(d) {
+    var ta = el('iTablaAnio'); ta.innerHTML = '';
+    I.porPeriodo(d.v, d.c, 'anio').reverse().forEach(function (x) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar ese año';
+      tr.appendChild(nuevo('td', null, x.clave)); tr.appendChild(nuevo('td', 'num', g$(x.debito))); tr.appendChild(nuevo('td', 'num', g$(x.credito)));
+      tr.appendChild(nuevo('td', 'num' + (x.saldo < 0 ? ' neg' : ''), g$(x.saldo))); tr.appendChild(nuevo('td', 'num', g$(x.neto_v))); tr.appendChild(nuevo('td', 'num', g$(x.neto_c)));
+      tr.addEventListener('click', function () { filtrarFechas(x.clave + '-01-01', x.clave + '-12-31'); });
+      ta.appendChild(tr);
+    }); vacia(ta, 6);
+    var tt = el('iTablaTipo'); tt.innerHTML = '';
+    I.porTipo(d.v, d.c).forEach(function (x) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar este tipo';
+      tr.appendChild(nuevo('td', null, x.libro)); tr.appendChild(nuevo('td', null, x.tipo)); tr.appendChild(nuevo('td', 'num', fmtN.format(x.cantidad)));
+      tr.appendChild(nuevo('td', 'num' + (x.neto < 0 ? ' neg' : ''), g$(x.neto))); tr.appendChild(nuevo('td', 'num' + (x.iva < 0 ? ' neg' : ''), g$(x.iva)));
+      tr.addEventListener('click', function () { ponerFiltro('tipo', x.clave); vista = x.clave.split(':')[0]; orden = { col: 'fecha', dir: -1 }; marcarTab('iTabsDet', el('iTabsDet').querySelector('[data-v="' + vista + '"]')); dibujarDetalle(datos()); });
+      tt.appendChild(tr);
+    }); vacia(tt, 5);
+  }
+
+  var COLS = {
+    ventas: [['fecha', 'Fecha'], ['comp', 'Comprobante'], ['tercero', 'Cliente'], ['cuit', 'CUIT'], ['gravado', 'Gravado', 1], ['exento', 'Exento', 1], ['iva', 'IVA', 1], ['otros', 'Otros', 1], ['total', 'Total', 1]],
+    compras: [['fecha', 'Fecha'], ['comp', 'Comprobante'], ['tercero', 'Proveedor'], ['cuit', 'CUIT'], ['neto', 'Neto', 1], ['exento', 'Exento', 1], ['iva_21', 'IVA 21 %', 1], ['iva_105', 'IVA 10,5 %', 1], ['iva', 'IVA total', 1], ['otros', 'Percep. y otros', 1], ['total', 'Total', 1]]
+  };
+  function filasDetalle(d) {
+    return (vista === 'compras' ? d.c : d.v).map(function (x) { var o = Object.assign({}, x); o.comp = (x.tipo || x.t_comp) + ' ' + x.n_comp; o.tercero = I.nombre(x); return o; });
+  }
+
+  function dibujarDetalle(d) {
+    var cols = COLS[vista], cab = el('iCabDet'); cab.innerHTML = '';
+    cols.forEach(function (c) {
+      var th = nuevo('th', 'ord' + (c[2] ? ' num' : ''), c[1] + (orden.col === c[0] ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''));
+      th.addEventListener('click', function () { if (orden.col === c[0]) orden.dir = -orden.dir; else { orden.col = c[0]; orden.dir = c[2] ? -1 : 1; } dibujarDetalle(datos()); });
+      cab.appendChild(th);
+    });
+    var numerica = cols.some(function (c) { return c[0] === orden.col && c[2]; });
+    var filas = filasDetalle(d).sort(function (a, b) {
+      var x = a[orden.col], y = b[orden.col];
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      return (numerica ? (+x - +y) : String(x).localeCompare(String(y))) * orden.dir;
+    });
+    var paginas = Math.max(1, Math.ceil(filas.length / POR_PAG)); if (pagina >= paginas) pagina = paginas - 1;
+    var tb = el('iTablaDet'); tb.innerHTML = '';
+    filas.slice(pagina * POR_PAG, (pagina + 1) * POR_PAG).forEach(function (x) {
+      var tr = nuevo('tr');
+      cols.forEach(function (c) {
+        var v = x[c[0]], td;
+        if (c[0] === 'fecha') td = nuevo('td', null, fechaTxt(v));
+        else if (c[2]) td = nuevo('td', 'num' + (+v < 0 ? ' neg' : ''), +v ? fmt$2.format(+v) : '—');
+        else if (c[0] === 'cuit') td = nuevo('td', I.tieneCuit(x) ? null : 'gris', I.tieneCuit(x) ? v : 'sin CUIT');
+        else td = nuevo('td', null, v == null ? '—' : String(v));
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    vacia(tb, cols.length);
+    el('iPagInfo').textContent = filas.length ? 'Mostrando ' + (pagina * POR_PAG + 1) + '–' + Math.min(filas.length, (pagina + 1) * POR_PAG) + ' de ' + fmtN.format(filas.length) + ' · página ' + (pagina + 1) + ' de ' + paginas : '';
+    el('iPagAnt').disabled = pagina === 0; el('iPagSig').disabled = pagina >= paginas - 1;
+  }
+
+  function descargarCsv() {
+    var filas = filasDetalle(datos());
+    var cab = vista === 'compras' ? ['fecha', 't_comp', 'n_comp', 'estado', 'cod_provee', 'proveedor', 'cuit', 'neto', 'exento', 'iva_21', 'iva_105', 'iva_27', 'iva_otras', 'iva', 'otros', 'total']
+      : ['fecha', 't_comp', 'tipo', 'n_comp', 'estado', 'cod_client', 'cliente', 'cuit', 'gravado', 'exento', 'iva', 'internos', 'otros', 'total'];
+    var esc = function (v) { v = v == null ? '' : String(v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var txt = cab.join(';') + '\n' + filas.map(function (x) { return cab.map(function (c) { return esc(x[c]); }).join(';'); }).join('\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + txt], { type: 'text/csv;charset=utf-8' }));
+    a.download = vista === 'compras' ? 'libro_iva_compras_empresa_ejemplo.csv' : 'libro_iva_ventas_empresa_ejemplo.csv'; document.body.appendChild(a); a.click(); a.remove();
+  }
+})();
+</script>

@@ -1,0 +1,42 @@
+OK     Vendedor: el menú muestra solo Ventas (Ventas)
+OK     Vendedor: sin Radar, abre en Ventas
+OK     Vendedor con "ve": no ve Descargar CSV
+OK     Vendedor con "ve": no ve Imprimir / PDF
+OK     Botón "Cambiar contraseña" visible arriba
+OK     Vendedor: abrir Compras a la fuerza muestra "no tiene acceso"
+OK     Vendedor: nunca se pidió una función de Compras, Legajos ni Seguridad
+OK     Vendedor: sin errores de JavaScript 
+OK     Cobrador sin carga: marca data-carga=0
+OK     Cobrador sin carga: el formulario de seguimiento no se ve
+OK     Cobrador con "exporta": el botón Descargar CSV no está tapado por permisos
+OK     Cobrador: sin errores de JavaScript 
+OK     Temporal: se abre la ventana de cambio de contraseña
+OK     Temporal: la ventana no tiene Cancelar
+OK     Temporal: no se leyeron permisos ni datos antes de cambiarla
+OK     Temporal: después de cambiarla se cierra la ventana
+OK     Temporal: después entra al Radar
+OK     Temporal: sin errores de JavaScript 
+OK     Super: ve los 9 módulos y Seguridad (10)
+OK     Super: lista 2 usuarios
+OK     Super: marca al que tiene contraseña temporal
+OK     Super: no puede blanquearse a sí mismo desde la lista
+OK     Super: el buscador filtra
+OK     Nuevo usuario: el rol sale de la tabla de roles
+OK     Nuevo usuario: muestra la contraseña temporal una vez
+OK     Nuevo usuario: al cerrar, la contraseña se borra de la pantalla
+OK     Blanquear: pide confirmación en ventana propia
+OK     Blanquear: muestra la temporal nueva
+OK     Roles: lista 4 roles
+OK     Roles: el rol super no se edita
+OK     Permisos: grilla con los 9 módulos
+OK     Permisos: cambiar Compras a "Ve" guarda en la base
+OK     Permisos: muestra "Guardado"
+OK     Nuevo rol: arma el código solo
+OK     Nuevo rol: guarda en la base
+OK     Bitácora: 2 movimientos
+OK     Bitácora: explica el cambio de permiso
+OK     Bitácora: filtra por acción
+OK     Super: sin errores de JavaScript 
+OK     Inactivo: vuelve al ingreso con el aviso
+
+40 de 40 OK

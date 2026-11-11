@@ -1,0 +1,493 @@
+<!-- ============ MODULO STOCK ============ -->
+<!-- Usa los estilos comunes de pantalla (filtros, kpis, paneles, tablas) que define el módulo Ventas; acá solo van los propios. -->
+<style>
+  .kpis.s8 { grid-template-columns:repeat(4,1fr); }
+  @media (max-width: 900px) { .kpis.s8 { grid-template-columns:repeat(2,1fr); } }
+  .s-base { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 12px; font-size:12.5px; color:var(--gray); }
+  .s-nota { font-size:12px; color:var(--gray); margin:0 0 12px; line-height:1.5; }
+  .s-aviso { font-size:12px; color:var(--amber); margin:0 0 12px; line-height:1.5; }
+  .etq { display:inline-block; font-size:11px; padding:1px 7px; border-radius:10px; background:rgba(255,255,255,.06); color:var(--gray); white-space:nowrap; }
+  .etq.rojo { background:rgba(229,72,77,.14); color:#ff8b8f; } .etq.ambar { background:rgba(224,162,59,.14); color:var(--amber); }
+  .etq.azul { background:rgba(57,135,229,.14); color:#8dbaf0; } .etq.verde { background:rgba(8,165,122,.14); color:var(--green-hover); }
+</style>
+
+<section class="modulo" id="modStock">
+  <div class="filtros">
+    <div class="fila-filtros">
+      <div class="filtro"><label for="sfPeriodo">Período (movimientos)</label><select id="sfPeriodo"></select></div>
+      <div class="filtro"><label for="sfDesde">Desde</label><input type="date" id="sfDesde"></div>
+      <div class="filtro"><label for="sfHasta">Hasta</label><input type="date" id="sfHasta"></div>
+      <div class="filtro"><label for="sfDeposito">Depósito</label><select id="sfDeposito"></select></div>
+      <div class="filtro"><label for="sfArticulo">Artículo</label><select id="sfArticulo"></select></div>
+      <div class="filtro"><label for="sfPerfil">Perfil</label><select id="sfPerfil"></select></div>
+      <div class="filtro"><label for="sfSituacion">Situación</label>
+        <select id="sfSituacion"><option value="">Todas</option><option value="con">Con stock</option><option value="negativo">Stock negativo</option>
+          <option value="bajo">Bajo el mínimo</option><option value="sobre">Sobre el máximo</option><option value="sinsalida">Con stock y sin ventas en el período</option><option value="sincosto">Sin costo en la base elegida</option></select></div>
+      <div class="filtro"><label for="sfTipo">Tipo de movimiento</label><select id="sfTipo"></select></div>
+      <div class="filtro ancho"><label for="sfTexto">Buscar</label><input type="text" id="sfTexto" placeholder="Artículo, código, número de comprobante…"></div>
+    </div>
+    <div class="chips" id="sChips"></div>
+  </div>
+
+  <div id="sMensaje" class="mensaje oculto"></div>
+  <div id="sCuerpo">
+    <div class="s-base">Valorizar a:
+      <span class="tabs" id="sTabsBase"><button data-b="vigente" class="on">Costo vigente</button><button data-b="ficha">Costo de ficha</button><button data-b="ppp">Promedio ponderado (PPP)</button></span>
+      <span id="sBaseAyuda"></span></div>
+    <div class="s-nota">Los saldos son los de hoy en Tango. El período cambia los movimientos, el consumo por ventas y los días de cobertura.</div>
+    <div class="s-aviso" id="sAvisoDatos"></div>
+    <div class="kpis s8" id="sKpis"></div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Movimientos por mes <span class="sub">unidades que entran y salen</span></span></h3>
+        <div class="lienzo"><canvas id="sChMes" aria-label="Movimientos de stock por mes"></canvas></div>
+        <div class="ayuda">Clic en un mes: filtra ese mes.</div>
+      </div>
+      <div class="panel">
+        <h3><span>Ranking <span class="sub">top 10</span></span>
+          <span class="tabs" id="sTabsRank"><button data-d="valor" class="on">Valorizado</button><button data-d="unidades">Unidades</button><button data-d="consumo">Vendido en el período</button></span></h3>
+        <div class="lienzo alto"><canvas id="sChRank" aria-label="Ranking de stock"></canvas></div>
+        <div class="ayuda" id="sAyudaRank">Clic en una barra: filtra ese artículo.</div>
+      </div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3>Por depósito</h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Depósito</th><th class="num">Artículos</th><th class="num">Unidades</th><th class="num">Valorizado</th></tr></thead>
+          <tbody id="sTablaDep"></tbody></table></div>
+        <h3 style="margin-top:18px">Movimientos por tipo <span class="sub">en el período</span></h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Tipo</th><th class="num">Renglones</th><th class="num">Entradas</th><th class="num">Salidas</th></tr></thead>
+          <tbody id="sTablaTipo"></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h3>Valorizado según cada costo</h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Costo</th><th class="num">Artículos con costo</th><th class="num">Cobertura</th><th class="num">Valorizado</th></tr></thead>
+          <tbody id="sTablaBases"></tbody></table></div>
+        <div class="ayuda" id="sBasesAyuda"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><span>Detalle <span class="sub" id="sSubDet"></span></span>
+        <span><span class="tabs" id="sTabsDet"><button data-v="sal" class="on">Saldos</button><button data-v="mov">Movimientos</button></span>
+        <button class="btn secundario chico" id="sBtnCsv">Descargar CSV</button></span></h3>
+      <div class="tabla-scroll"><table>
+        <thead><tr id="sCabDet"></tr></thead>
+        <tbody id="sTablaDet"></tbody></table></div>
+      <div class="pie-tabla"><span id="sPagInfo"></span>
+        <span><button class="btn secundario chico" id="sPagAnt">‹ Anterior</button> <button class="btn secundario chico" id="sPagSig">Siguiente ›</button></span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Lógica pura. saldos = api_stock_saldos_v2 (hoy, por artículo y depósito); movs = api_stock_movimientos_v2 (+ entra, - sale).
+  // ---------------------------------------------------------------------------
+  var S = window.StockLogica = {};
+  function r2(x) { return Math.round(x * 100) / 100; }
+
+  // Códigos de movimiento de Tango (sta20.tcomp_in_s). La descripción es la lectura del código; se muestra junto al código.
+  S.MOV = { AJ: 'Ajuste de inventario', AR: 'Armado de kits', CC: 'Devolución de cliente', CP: 'Devolución a proveedor', DC: 'Nota de débito a cliente',
+    DP: 'Nota de débito de proveedor', FR: 'Factura de venta', FS: 'Factura de compra', RE: 'Remito a cliente', RP: 'Remito de proveedor',
+    TI: 'Transferencia entre depósitos', VE: 'Entrada varia', VS: 'Salida varia' };
+  S.nombreMov = function (c) { return (S.MOV[c] || 'Código de Tango') + ' (' + c + ')'; };
+  S.PERFIL = { A: 'Compra y venta', C: 'Solo compra', V: 'Solo venta' };
+  S.nombrePerfil = function (p) { return S.PERFIL[p] || ('Perfil ' + p); };
+  S.VENTA = { FR: 1, RE: 1, DC: 1, CC: 1 };   // movimientos que forman el consumo por ventas (la devolución CC resta)
+  S.BASES = { vigente: 'costo_vigente', ficha: 'costo_ficha', ppp: 'costo_ppp' };
+  S.costo = function (s, base) { var v = s[S.BASES[base]]; return v == null || +v <= 0 ? null : +v; };
+  S.clave = function (x) { return x.cod_articu + '|' + x.cod_deposi; };
+
+  S.filtrarMovs = function (movs, f) {
+    var txt = (f.texto || '').trim().toLowerCase();
+    return movs.filter(function (m) {
+      if (f.desde && m.fecha < f.desde) return false;
+      if (f.hasta && m.fecha > f.hasta) return false;
+      if (f.deposito && m.cod_deposi !== f.deposito) return false;
+      if (f.articulo && m.cod_articu !== f.articulo) return false;
+      if (f.tipo && m.cod_mov !== f.tipo) return false;
+      if (txt && (m.articulo + ' ' + m.cod_articu + ' ' + m.n_comp + ' ' + m.t_comp).toLowerCase().indexOf(txt) < 0) return false;
+      return true;
+    });
+  };
+
+  // Unidades vendidas netas por artículo y depósito en los movimientos dados (salidas por venta menos devoluciones).
+  S.consumo = function (movs) {
+    var c = {};
+    movs.forEach(function (m) { if (S.VENTA[m.cod_mov]) { var k = S.clave(m); c[k] = (c[k] || 0) - (+m.cantidad); } });
+    Object.keys(c).forEach(function (k) { c[k] = r2(c[k]); });
+    return c;
+  };
+
+  S.situaciones = function (s, consumo, base) {
+    var q = +s.cantidad, r = [];
+    if (q < 0) r.push('negativo');
+    if (s.stock_min != null && q < +s.stock_min) r.push('bajo');
+    if (s.stock_max != null && q > +s.stock_max) r.push('sobre');
+    if (q > 0 && !(consumo[S.clave(s)] > 0)) r.push('sinsalida');
+    if (q !== 0 && S.costo(s, base) == null) r.push('sincosto');
+    return r;
+  };
+
+  // Filtra saldos. consumo = S.consumo(movimientos del período, sin filtro de tipo ni texto).
+  S.filtrarSaldos = function (saldos, f, consumo, base) {
+    var txt = (f.texto || '').trim().toLowerCase();
+    return saldos.filter(function (s) {
+      if (f.deposito && s.cod_deposi !== f.deposito) return false;
+      if (f.articulo && s.cod_articu !== f.articulo) return false;
+      if (f.perfil && s.perfil !== f.perfil) return false;
+      if (f.situacion === 'con' && !(+s.cantidad > 0)) return false;
+      if (f.situacion && f.situacion !== 'con' && S.situaciones(s, consumo, base).indexOf(f.situacion) < 0) return false;
+      if (txt && (s.articulo + ' ' + s.cod_articu).toLowerCase().indexOf(txt) < 0) return false;
+      return true;
+    });
+  };
+
+  S.kpis = function (saldos, consumo, base) {
+    var k = { unidades: 0, valor: 0, valorAbs: 0, valorConCosto: 0, articulos: 0, renglones: saldos.length, negativos: 0, bajo: 0, sobre: 0, sinsalida: 0, comprometida: 0, pendiente: 0, sincosto: 0 };
+    var art = {}, absTot = 0, absCon = 0;
+    saldos.forEach(function (s) {
+      var q = +s.cantidad, c = S.costo(s, base), sit = S.situaciones(s, consumo, base);
+      k.unidades += q; k.comprometida += +s.comprometida; k.pendiente += +s.pendiente;
+      if (q > 0) art[s.cod_articu] = 1;
+      if (c != null) { k.valor += q * c; absCon += Math.abs(q); }
+      absTot += Math.abs(q);
+      if (sit.indexOf('negativo') >= 0) k.negativos++;
+      if (sit.indexOf('bajo') >= 0) k.bajo++;
+      if (sit.indexOf('sobre') >= 0) k.sobre++;
+      if (sit.indexOf('sinsalida') >= 0) k.sinsalida++;
+      if (sit.indexOf('sincosto') >= 0) k.sincosto++;
+    });
+    k.articulos = Object.keys(art).length;
+    ['unidades', 'valor', 'comprometida', 'pendiente'].forEach(function (x) { k[x] = r2(k[x]); });
+    k.cobertura = absTot ? Math.round(1000 * absCon / absTot) / 10 : null;   // % de unidades con costo en la base elegida
+    return k;
+  };
+
+  S.bases = function (saldos) {
+    return ['vigente', 'ficha', 'ppp'].map(function (b) {
+      var art = {}, artCon = {}, v = 0;
+      saldos.forEach(function (s) { if (+s.cantidad === 0) return; art[s.cod_articu] = 1; var c = S.costo(s, b); if (c != null) { artCon[s.cod_articu] = 1; v += (+s.cantidad) * c; } });
+      var n = Object.keys(art).length, nc = Object.keys(artCon).length;
+      return { base: b, articulos: n, con_costo: nc, cobertura: n ? Math.round(1000 * nc / n) / 10 : null, valor: r2(v) };
+    });
+  };
+
+  S.porMes = function (movs) {
+    var m = {};
+    movs.forEach(function (x) { var k = x.fecha.slice(0, 7); if (!m[k]) m[k] = { mes: k, entradas: 0, salidas: 0 }; if (+x.cantidad >= 0) m[k].entradas += +x.cantidad; else m[k].salidas += -x.cantidad; });
+    return Object.keys(m).sort().map(function (k) { return { mes: k, entradas: r2(m[k].entradas), salidas: r2(m[k].salidas) }; });
+  };
+
+  S.porDeposito = function (saldos, base) {
+    var g = {};
+    saldos.forEach(function (s) { var k = s.cod_deposi; if (!g[k]) g[k] = { clave: k, nombre: s.deposito, art: {}, unidades: 0, valor: 0 };
+      if (+s.cantidad > 0) g[k].art[s.cod_articu] = 1; g[k].unidades += +s.cantidad; var c = S.costo(s, base); if (c != null) g[k].valor += (+s.cantidad) * c; });
+    return Object.keys(g).map(function (k) { var x = g[k]; return { clave: k, nombre: x.nombre, articulos: Object.keys(x.art).length, unidades: r2(x.unidades), valor: r2(x.valor) }; })
+      .sort(function (a, b) { return b.valor - a.valor; });
+  };
+
+  S.porTipo = function (movs) {
+    var g = {};
+    movs.forEach(function (m) { var k = m.cod_mov; if (!g[k]) g[k] = { clave: k, renglones: 0, entradas: 0, salidas: 0 }; g[k].renglones++; if (+m.cantidad >= 0) g[k].entradas += +m.cantidad; else g[k].salidas += -m.cantidad; });
+    return Object.keys(g).map(function (k) { var x = g[k]; return { clave: k, renglones: x.renglones, entradas: r2(x.entradas), salidas: r2(x.salidas) }; })
+      .sort(function (a, b) { return b.renglones - a.renglones; });
+  };
+
+  // Top n artículos (todos los depósitos juntos) por valorizado, unidades o consumo del período.
+  S.ranking = function (saldos, consumo, dim, base, n) {
+    var g = {};
+    saldos.forEach(function (s) { var k = s.cod_articu; if (!g[k]) g[k] = { clave: k, nombre: s.articulo, valor: 0 };
+      var q = +s.cantidad, c = S.costo(s, base);
+      if (dim === 'valor') { if (c != null) g[k].valor += q * c; } else if (dim === 'unidades') g[k].valor += q; else g[k].valor += consumo[S.clave(s)] || 0; });
+    var arr = Object.keys(g).map(function (k) { g[k].valor = r2(g[k].valor); return g[k]; }).filter(function (x) { return x.valor !== 0; })
+      .sort(function (a, b) { return b.valor - a.valor; });
+    if (arr.length > n) { var resto = arr.slice(n).reduce(function (t, x) { return t + x.valor; }, 0); var total = arr.length; arr = arr.slice(0, n); arr.push({ clave: null, nombre: 'Otros (' + (total - n) + ')', valor: r2(resto) }); }
+    return arr;
+  };
+
+  S.dias = function (desde, hasta) { var a = new Date(desde + 'T00:00:00'), b = new Date(hasta + 'T00:00:00'); return Math.round((b - a) / 864e5) + 1; };
+  // Días que alcanza el stock al ritmo de venta del período. null si no hay stock o no hubo ventas.
+  S.cobertura = function (cantidad, consumo, dias) { return cantidad > 0 && consumo > 0 && dias > 0 ? Math.round(cantidad / (consumo / dias)) : null; };   // sin stock o sin ventas: no aplica
+
+  if (typeof window.document === 'undefined') return;
+
+  // ---------------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------------
+  var SAL = null, MOVS = null, F = {}, graf = {}, base = 'vigente', dimRank = 'valor', vista = 'sal', MIN = null, MAX = null;
+  var orden = { col: 'valor', dir: -1 }, pagina = 0, POR_PAG = 25;
+  var COL = { azul: '#3987e5', naranja: '#d95926', aqua: '#199e70', rojo: '#e66767', grilla: 'rgba(255,255,255,0.07)', texto: '#7C93A3', claro: '#F2F5F3' };
+  var fmt$ = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+  var fmt$2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 });
+  var fmtN = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  var fmtD = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
+  function g$(x) { return x == null ? '—' : fmt$.format(x); }
+  function el(id) { return document.getElementById(id); }
+  function fechaTxt(s) { if (!s) return '—'; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function mesTxt(k) { var n = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return n[+k.slice(5, 7) - 1] + ' ' + k.slice(2, 4); }
+  function nuevo(tag, clase, texto) { var e = document.createElement(tag); if (clase) e.className = clase; if (texto != null) e.textContent = texto; return e; }
+  function compacto(v) { var a = Math.abs(v); if (a >= 1e6) return fmtD.format(v / 1e6) + ' M'; if (a >= 1e3) return fmtN.format(v / 1e3) + ' mil'; return fmtN.format(v); }
+  var NOMBRE_BASE = { vigente: 'Costo vigente', ficha: 'Costo de ficha', ppp: 'Promedio ponderado (PPP)' };
+  var AYUDA_BASE = { vigente: 'última compra real; si no hay, el costo de la ficha de Tango', ficha: 'último costo cargado en la ficha del artículo en Tango', ppp: 'precio promedio ponderado de Tango, último mes con dato' };
+
+  window.MODULOS = window.MODULOS || {};
+  window.MODULOS.Stock = { titulo: 'Stock', cargar: cargar };
+
+  function cargar() {
+    if (SAL) { dibujar(); return; }
+    el('sCuerpo').classList.add('cargando-suave');
+    Promise.all([sb.rpc('api_stock_saldos_v2'), sb.rpc('api_stock_movimientos_v2', {})]).then(function (rs) {
+      el('sCuerpo').classList.remove('cargando-suave');
+      var err = rs[0].error || rs[1].error;
+      if (err) { aviso('sMensaje', 'No se pudo leer el stock: ' + textoError(err)); return; }
+      SAL = (rs[0].data || []).map(function (s) { ['ultima_entrada', 'ultima_salida', 'fecha_costo'].forEach(function (k) { if (s[k]) s[k] = String(s[k]).slice(0, 10); }); return s; });
+      MOVS = (rs[1].data || []).map(function (m) { m.fecha = String(m.fecha).slice(0, 10); return m; });
+      armarFiltros(); dibujar();
+    }).catch(function (e) { el('sCuerpo').classList.remove('cargando-suave'); aviso('sMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  function opciones(sel, pares, todos) { sel.innerHTML = ''; sel.appendChild(new Option(todos, '')); pares.forEach(function (p) { sel.appendChild(new Option(p[1], p[0])); }); }
+  function unicos(src, clave, nombre, fn) {
+    var m = {}; src.forEach(function (x) { if (x[clave] != null) m[x[clave]] = fn ? fn(x[nombre]) : x[nombre]; });
+    return Object.keys(m).map(function (k) { return [k, m[k]]; }).sort(function (a, b) { return String(a[1]).localeCompare(String(b[1])); });
+  }
+  var IDS = { desde: 'sfDesde', hasta: 'sfHasta', deposito: 'sfDeposito', articulo: 'sfArticulo', perfil: 'sfPerfil', situacion: 'sfSituacion', tipo: 'sfTipo', texto: 'sfTexto' };
+
+  function armarFiltros() {
+    var fechas = MOVS.map(function (m) { return m.fecha; }).sort(); MIN = fechas[0]; MAX = fechas[fechas.length - 1];
+    el('sfDesde').min = el('sfHasta').min = MIN; el('sfDesde').max = el('sfHasta').max = MAX;
+    var anios = {}; MOVS.forEach(function (m) { anios[m.fecha.slice(0, 4)] = 1; });
+    var per = [['todo', 'Todo (' + fechaTxt(MIN) + ' al ' + fechaTxt(MAX) + ')'], ['12m', 'Últimos 12 meses con datos'], ['6m', 'Últimos 6 meses con datos']];
+    Object.keys(anios).sort().reverse().forEach(function (a) { per.push(['a' + a, 'Año ' + a]); }); per.push(['custom', 'Personalizado']);
+    var sp = el('sfPeriodo'); sp.innerHTML = ''; per.forEach(function (p) { sp.appendChild(new Option(p[1], p[0])); });
+    opciones(el('sfDeposito'), unicos(SAL, 'cod_deposi', 'deposito'), 'Todos');
+    opciones(el('sfArticulo'), unicos(SAL, 'cod_articu', 'articulo'), 'Todos');
+    opciones(el('sfPerfil'), unicos(SAL, 'perfil', 'perfil', S.nombrePerfil), 'Todos');
+    opciones(el('sfTipo'), unicos(MOVS, 'cod_mov', 'cod_mov', S.nombreMov), 'Todos');
+
+    var sinSaldo = {}; var conSaldo = {}; SAL.forEach(function (s) { conSaldo[S.clave(s)] = 1; });
+    MOVS.forEach(function (m) { if (!conSaldo[S.clave(m)]) sinSaldo[S.clave(m)] = (sinSaldo[S.clave(m)] || 0) + Math.abs(+m.cantidad); });
+    var nSin = Object.keys(sinSaldo).length;
+    var av = [];
+    if (nSin) av.push('ℹ ' + nSin + ' combinaciones de artículo y depósito tienen movimientos pero no saldo: son artículos que en Tango no llevan stock (servicios, garantías, kits, algunos tornillos). Sus movimientos se ven en el detalle pero no son stock.');
+    var bs = S.bases(SAL), mx = Math.max.apply(null, bs.map(function (b) { return b.valor; })), mn = Math.min.apply(null, bs.filter(function (b) { return b.valor > 0; }).map(function (b) { return b.valor; }));
+    if (mn > 0 && mx / mn >= 10) av.push('⚠ Las tres formas de valorizar dan resultados muy distintos (de ' + g$(mn) + ' a ' + g$(mx) + '). Los costos de Tango cambian de escala en 2024; revisá la tabla "Valorizado según cada costo" antes de usar un número.');
+    el('sAvisoDatos').textContent = ''; av.forEach(function (t, i) { if (i) el('sAvisoDatos').appendChild(document.createElement('br')); el('sAvisoDatos').appendChild(document.createTextNode(t)); });
+
+    sp.addEventListener('change', function () {
+      var v = sp.value, d = null, h = null;
+      if (v === '12m' || v === '6m') { var n = v === '12m' ? 12 : 6; var x = new Date(MAX + 'T00:00:00'); x.setMonth(x.getMonth() - n); x.setDate(x.getDate() + 1); d = x.toISOString().slice(0, 10); h = MAX; }
+      else if (v.charAt(0) === 'a') { d = v.slice(1) + '-01-01'; h = v.slice(1) + '-12-31'; }
+      else if (v === 'custom') { return; }
+      F.desde = d; F.hasta = h; el('sfDesde').value = d || ''; el('sfHasta').value = h || ''; pagina = 0; dibujar();
+    });
+    ['desde', 'hasta'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; el('sfPeriodo').value = 'custom'; pagina = 0; dibujar(); }); });
+    ['deposito', 'articulo', 'perfil', 'situacion', 'tipo'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; pagina = 0; dibujar(); }); });
+    var t = null; el('sfTexto').addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { F.texto = el('sfTexto').value; pagina = 0; dibujar(); }, 250); });
+    el('sTabsBase').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; base = b.dataset.b; marcarTab('sTabsBase', b); dibujar(); });
+    el('sTabsRank').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; dimRank = b.dataset.d; marcarTab('sTabsRank', b); dibujarRank(datos()); });
+    el('sTabsDet').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; vista = b.dataset.v; orden = vista === 'sal' ? { col: 'valor', dir: -1 } : { col: 'fecha', dir: -1 }; pagina = 0; marcarTab('sTabsDet', b); dibujarDetalle(datos()); });
+    el('sPagAnt').addEventListener('click', function () { if (pagina > 0) { pagina--; dibujarDetalle(datos()); } });
+    el('sPagSig').addEventListener('click', function () { pagina++; dibujarDetalle(datos()); });
+    el('sBtnCsv').addEventListener('click', descargarCsv);
+  }
+  function marcarTab(id, b) { el(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); }
+
+  // Datos del momento: movimientos del período (para consumo: sin filtro de tipo ni texto) y saldos filtrados.
+  function datos() {
+    var desde = F.desde || MIN, hasta = F.hasta || MAX;
+    var movPer = S.filtrarMovs(MOVS, { desde: F.desde, hasta: F.hasta, deposito: F.deposito, articulo: F.articulo });
+    var consumo = S.consumo(movPer);
+    var movs = S.filtrarMovs(MOVS, F);
+    var sal = S.filtrarSaldos(SAL, F, consumo, base);
+    return { movs: movs, sal: sal, consumo: consumo, dias: S.dias(desde, hasta) };
+  }
+
+  function ponerFiltro(k, v) { F[k] = v; pagina = 0; if (IDS[k]) el(IDS[k]).value = v || ''; dibujar(); }
+
+  function dibujarChips() {
+    var c = el('sChips'); c.innerHTML = '';
+    var nombres = { desde: 'Desde', hasta: 'Hasta', deposito: 'Depósito', articulo: 'Artículo', perfil: 'Perfil', situacion: 'Situación', tipo: 'Movimiento', texto: 'Buscar' };
+    var hay = false;
+    Object.keys(nombres).forEach(function (k) {
+      if (!F[k]) return; hay = true;
+      var v = F[k], s = el(IDS[k]);
+      if (s.tagName === 'SELECT' && s.options[s.selectedIndex]) v = s.options[s.selectedIndex].text;
+      if (k === 'desde' || k === 'hasta') v = fechaTxt(v);
+      var ch = nuevo('span', 'chip-f', nombres[k] + ': ' + v), x = nuevo('button', null, '×'); x.title = 'Quitar';
+      x.addEventListener('click', function () { F[k] = null; el(IDS[k]).value = ''; if (k === 'desde' || k === 'hasta') el('sfPeriodo').value = 'custom'; pagina = 0; dibujar(); });
+      ch.appendChild(x); c.appendChild(ch);
+    });
+    if (hay) { var lim = nuevo('button', 'btn secundario chico', 'Limpiar todo');
+      lim.addEventListener('click', function () { F = {}; Object.keys(IDS).forEach(function (k) { el(IDS[k]).value = ''; }); el('sfPeriodo').value = 'todo'; pagina = 0; dibujar(); }); c.appendChild(lim); }
+  }
+
+  function dibujar() {
+    var d = datos();
+    el('sBaseAyuda').textContent = '· ' + AYUDA_BASE[base];
+    [dibujarChips, dibujarKpis, dibujarMes, dibujarRank, dibujarTablas, dibujarDetalle].forEach(function (fn) {
+      try { fn(d); } catch (e) { console.error(e); aviso('sMensaje', 'Una parte de la pantalla no se pudo dibujar: ' + e.message); }
+    });
+  }
+
+  function tarjeta(cont, et, val, nota, clase, filtro) {
+    var t = nuevo('div', 'kpi'); t.appendChild(nuevo('div', 'et', et)); t.appendChild(nuevo('div', 'val' + (clase ? ' ' + clase : ''), val));
+    if (nota) t.appendChild(nuevo('div', 'nota', nota));
+    if (filtro) { t.style.cursor = 'pointer'; t.title = 'Clic para ver esos artículos'; t.addEventListener('click', function () { ponerFiltro('situacion', filtro); }); }
+    cont.appendChild(t);
+  }
+
+  function dibujarKpis(d) {
+    var k = S.kpis(d.sal, d.consumo, base), c = el('sKpis'); c.innerHTML = '';
+    tarjeta(c, 'Unidades en stock', fmtD.format(k.unidades), fmtN.format(k.renglones) + ' saldos (artículo y depósito)');
+    tarjeta(c, 'Valorizado', g$(k.valor), NOMBRE_BASE[base] + ' · ' + (k.cobertura == null ? '—' : fmtD.format(k.cobertura) + ' % de las unidades con costo'));
+    tarjeta(c, 'Artículos con stock', fmtN.format(k.articulos), null, null, 'con');
+    tarjeta(c, 'Stock negativo', fmtN.format(k.negativos), 'saldos por debajo de cero', k.negativos ? 'neg' : '', 'negativo');
+    tarjeta(c, 'Bajo el mínimo', fmtN.format(k.bajo), 'según el mínimo de la ficha', null, 'bajo');
+    tarjeta(c, 'Sobre el máximo', fmtN.format(k.sobre), 'según el máximo de la ficha', null, 'sobre');
+    tarjeta(c, 'Sin ventas en el período', fmtN.format(k.sinsalida), 'saldos con stock que no se vendieron', null, 'sinsalida');
+    tarjeta(c, 'Comprometido', fmtD.format(k.comprometida), 'unidades · pendiente ' + fmtD.format(k.pendiente) + ' (según Tango)');
+    el('sSubDet').textContent = '· ' + fmtN.format(d.sal.length) + ' saldos, ' + fmtN.format(d.movs.length) + ' movimientos';
+  }
+
+  function opcionesBase(extra) {
+    var o = { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#09233A', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, titleColor: COL.texto, bodyColor: COL.claro, bodyFont: { weight: '600' }, padding: 10, displayColors: false } },
+      scales: { x: { grid: { display: false }, ticks: { color: COL.texto, font: { size: 11 } }, border: { color: 'rgba(255,255,255,.12)' } },
+                y: { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 } }, border: { display: false } } } };
+    return Object.assign(o, extra || {});
+  }
+  function cursor(e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; }
+
+  function dibujarMes(d) {
+    var m = S.porMes(d.movs);
+    var cfg = { type: 'bar', data: { labels: m.map(function (x) { return mesTxt(x.mes); }), datasets: [
+        { label: 'Entradas', data: m.map(function (x) { return x.entradas; }), backgroundColor: COL.azul, borderRadius: 3, maxBarThickness: 16 },
+        { label: 'Salidas', data: m.map(function (x) { return x.salidas; }), backgroundColor: COL.naranja, borderRadius: 3, maxBarThickness: 16 }] },
+      options: opcionesBase({ onHover: cursor, onClick: function (e, act) {
+        if (!act.length) return; var k = m[act[0].index].mes; var fin = new Date(+k.slice(0, 4), +k.slice(5, 7), 0);
+        F.desde = k + '-01'; F.hasta = k + '-' + String(fin.getDate()).padStart(2, '0'); el('sfDesde').value = F.desde; el('sfHasta').value = F.hasta; el('sfPeriodo').value = 'custom'; pagina = 0; dibujar(); } }) };
+    cfg.options.plugins.legend = { display: true, position: 'top', align: 'end', labels: { color: COL.claro, boxWidth: 10, boxHeight: 10, font: { size: 11.5 } } };
+    cfg.options.plugins.tooltip.displayColors = true;
+    cfg.options.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ': ' + fmtD.format(c.raw) + ' u.'; } };
+    cfg.options.scales.y.ticks.callback = function (v) { return compacto(v); };
+    if (graf.mes) graf.mes.destroy();
+    graf.mes = new Chart(el('sChMes'), cfg);
+  }
+
+  function dibujarRank(d) {
+    var r = S.ranking(d.sal, d.consumo, dimRank, base, 10), esPlata = dimRank === 'valor';
+    el('sAyudaRank').textContent = { valor: 'Valorizado a ' + NOMBRE_BASE[base].toLowerCase() + '.', unidades: 'Unidades en stock hoy.', consumo: 'Unidades vendidas netas en el período (facturas y remitos menos devoluciones).' }[dimRank] + ' Clic en una barra: filtra ese artículo.';
+    var cfg = { type: 'bar', data: { labels: r.map(function (x) { var s = String(x.nombre); return s.length > 28 ? s.slice(0, 27) + '…' : s; }),
+        datasets: [{ data: r.map(function (x) { return x.valor; }), backgroundColor: r.map(function (x) { return x.clave === null ? 'rgba(124,147,163,.5)' : (x.valor < 0 ? COL.rojo : COL.aqua); }), borderRadius: 4, borderSkipped: false, maxBarThickness: 22 }] },
+      options: opcionesBase({ indexAxis: 'y', onHover: cursor, onClick: function (e, act) { if (!act.length) return; var x = r[act[0].index]; if (x.clave !== null) ponerFiltro('articulo', x.clave); } }) };
+    cfg.options.scales.x = { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } };
+    cfg.options.scales.y = { grid: { display: false }, ticks: { color: COL.claro, font: { size: 11.5 } }, border: { color: 'rgba(255,255,255,.12)' } };
+    cfg.options.plugins.tooltip.callbacks = { title: function (c) { return r[c[0].dataIndex].nombre; }, label: function (c) { return esPlata ? g$(c.raw) : fmtD.format(c.raw) + ' u.'; } };
+    if (graf.rank) graf.rank.destroy();
+    graf.rank = new Chart(el('sChRank'), cfg);
+  }
+
+  function vacia(tb, n, txt) { if (!tb.children.length) { var tr = nuevo('tr'), td = nuevo('td', 'gris', txt || 'Sin datos para estos filtros.'); td.colSpan = n; tr.appendChild(td); tb.appendChild(tr); } }
+
+  function dibujarTablas(d) {
+    var tb = el('sTablaDep'); tb.innerHTML = '';
+    S.porDeposito(d.sal, base).forEach(function (x) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar';
+      tr.appendChild(nuevo('td', null, x.nombre)); tr.appendChild(nuevo('td', 'num', fmtN.format(x.articulos)));
+      tr.appendChild(nuevo('td', 'num', fmtD.format(x.unidades))); tr.appendChild(nuevo('td', 'num', g$(x.valor)));
+      tr.addEventListener('click', function () { ponerFiltro('deposito', x.clave); }); tb.appendChild(tr);
+    }); vacia(tb, 4);
+    var tt = el('sTablaTipo'); tt.innerHTML = '';
+    S.porTipo(d.movs).forEach(function (x) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar';
+      tr.appendChild(nuevo('td', null, S.nombreMov(x.clave))); tr.appendChild(nuevo('td', 'num', fmtN.format(x.renglones)));
+      tr.appendChild(nuevo('td', 'num', x.entradas ? fmtD.format(x.entradas) : '—')); tr.appendChild(nuevo('td', 'num', x.salidas ? fmtD.format(x.salidas) : '—'));
+      tr.addEventListener('click', function () { ponerFiltro('tipo', x.clave); }); tt.appendChild(tr);
+    }); vacia(tt, 4);
+    var bs = el('sTablaBases'); bs.innerHTML = '';
+    S.bases(d.sal).forEach(function (x) {
+      var tr = nuevo('tr', 'clic' + (x.base === base ? ' sel' : '')); tr.title = 'Usar este costo';
+      tr.appendChild(nuevo('td', null, NOMBRE_BASE[x.base])); tr.appendChild(nuevo('td', 'num', fmtN.format(x.con_costo) + ' de ' + fmtN.format(x.articulos)));
+      tr.appendChild(nuevo('td', 'num', x.cobertura == null ? '—' : fmtD.format(x.cobertura) + ' %')); tr.appendChild(nuevo('td', 'num', g$(x.valor)));
+      tr.addEventListener('click', function () { base = x.base; marcarTab('sTabsBase', el('sTabsBase').querySelector('[data-b="' + x.base + '"]')); dibujar(); }); bs.appendChild(tr);
+    }); vacia(bs, 4);
+    el('sBasesAyuda').textContent = 'Costo vigente: ' + AYUDA_BASE.vigente + '. Costo de ficha: ' + AYUDA_BASE.ficha + '. PPP: ' + AYUDA_BASE.ppp + '. Clic en una fila para usar ese costo en toda la pantalla.';
+  }
+
+  var COLS = {
+    sal: [['articulo', 'Artículo'], ['deposito', 'Depósito'], ['cantidad', 'Stock', 1], ['comprometida', 'Comprom.', 1], ['stock_min', 'Mín.', 1], ['stock_max', 'Máx.', 1],
+      ['costo', 'Costo', 1], ['valor', 'Valorizado', 1], ['consumo', 'Vendido', 1], ['cob', 'Días de stock', 1], ['ultima_salida', 'Última salida'], ['sit', 'Situación']],
+    mov: [['fecha', 'Fecha'], ['comprobante', 'Comprobante'], ['mov', 'Movimiento'], ['articulo', 'Artículo'], ['deposito', 'Depósito'], ['cantidad', 'Cantidad', 1]]
+  };
+  var SIT = { negativo: ['Negativo', 'rojo'], bajo: ['Bajo mínimo', 'ambar'], sobre: ['Sobre máximo', 'azul'], sinsalida: ['Sin ventas', ''], sincosto: ['Sin costo', 'ambar'] };
+
+  function filasDetalle(d) {
+    if (vista === 'mov') return d.movs.map(function (m) { var o = Object.assign({}, m); o.comprobante = (m.t_comp || '') + ' ' + (m.n_comp || ''); o.mov = S.nombreMov(m.cod_mov); return o; });
+    return d.sal.map(function (s) {
+      var o = Object.assign({}, s), c = S.costo(s, base), cons = d.consumo[S.clave(s)] || 0;
+      o.costo = c; o.valor = c == null ? null : r2((+s.cantidad) * c); o.consumo = cons; o.cob = S.cobertura(+s.cantidad, cons, d.dias);
+      o.sits = S.situaciones(s, d.consumo, base); o.sit = o.sits.join(' ');
+      return o;
+    });
+  }
+
+  function dibujarDetalle(d) {
+    var cols = COLS[vista], cab = el('sCabDet'); cab.innerHTML = '';
+    cols.forEach(function (c) {
+      var th = nuevo('th', 'ord' + (c[2] ? ' num' : ''), c[1] + (orden.col === c[0] ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''));
+      th.addEventListener('click', function () { if (orden.col === c[0]) orden.dir = -orden.dir; else { orden.col = c[0]; orden.dir = c[2] ? -1 : 1; } dibujarDetalle(datos()); });
+      cab.appendChild(th);
+    });
+    var numerica = cols.some(function (c) { return c[0] === orden.col && c[2]; });
+    var filas = filasDetalle(d).sort(function (a, b) {
+      var x = a[orden.col], y = b[orden.col];
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      return (numerica ? (+x - +y) : String(x).localeCompare(String(y))) * orden.dir;
+    });
+    var paginas = Math.max(1, Math.ceil(filas.length / POR_PAG)); if (pagina >= paginas) pagina = paginas - 1;
+    var tb = el('sTablaDet'); tb.innerHTML = '';
+    filas.slice(pagina * POR_PAG, (pagina + 1) * POR_PAG).forEach(function (x) {
+      var tr = nuevo('tr');
+      function artCelda() { var td = nuevo('td', 'clic', x.articulo); td.title = 'Filtrar este artículo'; td.addEventListener('click', function () { ponerFiltro('articulo', x.cod_articu); }); return td; }
+      if (vista === 'mov') {
+        tr.appendChild(nuevo('td', null, fechaTxt(x.fecha))); tr.appendChild(nuevo('td', null, x.comprobante)); tr.appendChild(nuevo('td', null, x.mov));
+        var a = artCelda(); if (x.lleva_stock === false) a.appendChild(nuevo('span', 'etq', ' no lleva stock')); tr.appendChild(a);
+        tr.appendChild(nuevo('td', null, x.deposito)); tr.appendChild(nuevo('td', 'num' + (+x.cantidad < 0 ? ' neg' : ''), fmtD.format(+x.cantidad)));
+      } else {
+        tr.appendChild(artCelda()); tr.appendChild(nuevo('td', null, x.deposito));
+        tr.appendChild(nuevo('td', 'num' + (+x.cantidad < 0 ? ' neg' : ''), fmtD.format(+x.cantidad)));
+        tr.appendChild(nuevo('td', 'num', +x.comprometida ? fmtD.format(+x.comprometida) : '—'));
+        tr.appendChild(nuevo('td', 'num', x.stock_min == null ? '—' : fmtD.format(+x.stock_min))); tr.appendChild(nuevo('td', 'num', x.stock_max == null ? '—' : fmtD.format(+x.stock_max)));
+        tr.appendChild(nuevo('td', 'num', x.costo == null ? 'sin costo' : fmt$2.format(x.costo))); tr.appendChild(nuevo('td', 'num', g$(x.valor)));
+        tr.appendChild(nuevo('td', 'num', x.consumo ? fmtD.format(x.consumo) : '—'));
+        tr.appendChild(nuevo('td', 'num', x.cob == null ? '—' : fmtN.format(x.cob)));
+        tr.appendChild(nuevo('td', null, fechaTxt(x.ultima_salida)));
+        var ts = nuevo('td'); x.sits.forEach(function (s) { var e = nuevo('span', 'etq ' + SIT[s][1], SIT[s][0]); e.style.marginRight = '4px'; ts.appendChild(e); }); tr.appendChild(ts);
+      }
+      tb.appendChild(tr);
+    });
+    vacia(tb, cols.length);
+    el('sPagInfo').textContent = filas.length ? 'Mostrando ' + (pagina * POR_PAG + 1) + '–' + Math.min(filas.length, (pagina + 1) * POR_PAG) + ' de ' + fmtN.format(filas.length) + ' · página ' + (pagina + 1) + ' de ' + paginas : '';
+    el('sPagAnt').disabled = pagina === 0; el('sPagSig').disabled = pagina >= paginas - 1;
+  }
+
+  function descargarCsv() {
+    var d = datos(), filas = filasDetalle(d);
+    var cab = vista === 'mov' ? ['fecha', 't_comp', 'n_comp', 'tipo_mov', 'cod_mov', 'cod_articu', 'articulo', 'lleva_stock', 'cod_deposi', 'deposito', 'cantidad']
+      : ['cod_articu', 'articulo', 'cod_deposi', 'deposito', 'cantidad', 'comprometida', 'pendiente', 'stock_min', 'stock_max', 'costo', 'valor', 'consumo', 'cob', 'ultima_salida', 'sit'];
+    var esc = function (v) { v = v == null ? '' : String(v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var txt = cab.join(';') + '\n' + filas.map(function (x) { return cab.map(function (c) { return esc(x[c]); }).join(';'); }).join('\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + txt], { type: 'text/csv;charset=utf-8' }));
+    a.download = vista === 'mov' ? 'stock_movimientos_empresa_ejemplo.csv' : 'stock_saldos_empresa_ejemplo.csv'; document.body.appendChild(a); a.click(); a.remove();
+  }
+})();
+</script>

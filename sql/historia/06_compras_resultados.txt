@@ -1,0 +1,19 @@
+Pruebas Compras - 26/09/2026 - base de prueba ushvdubzbpctctodujen (solo lectura, todo se deshace al final)
+P01 comprobantes = resumen existente (87): 87 PASA
+P02 neto gravado = resumen (346588.65): 346588.65 PASA
+P03 total = resumen (680126.01): 680126.01 PASA
+P04 IVA = resumen (80061.65): 80061.65 PASA
+P05 total por proveedor = funcion existente (0 diferencias): 0 PASA
+P06 renglones de articulos = cpa46 sin anulados (87): 87 PASA
+P07 renglones de articulos sin comprobante: 0 (informativo)
+P08 comprobantes sin vencimiento (1800 = sin fecha): 87 (informativo: ningun comprobante tiene vencimiento cargado)
+P09 estados: PEN:59, ***:16, CAN:7, CTA:5 (informativo)
+P10 con usuario logueado se leen los mismos datos (680126.01 / 87 renglones): 680126.01 PASA
+P11 anonimo no puede ejecutar: PASA
+P12 filtro 2023 = resumen 2023 (318841.74): 318841.74 PASA
+P13 renglones de articulos = neto + exento de su comprobante (0 diferencias): 0 PASA
+P14 provincia con nombre, no codigo (0 codigos sueltos): 0 PASA
+P15 provincias: Sin provincia (codigo 00):57, EXTERIOR:19, CAPITAL FEDERAL:11 (informativo)
+Total 680.126,01 = neto 346.588,65 + exento 230.851,57 + IVA 80.061,65 + otros impuestos/percepciones 22.624,14
+58 comprobantes tienen renglones de articulos; 29 no (total 71.633,63).
+Resultado: 12 de 12 PASA.

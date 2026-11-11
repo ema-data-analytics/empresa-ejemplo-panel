@@ -1,0 +1,22 @@
+    /* Permisos: el menú falla CERRADO (un módulo se ve solo si la base lo habilita para tu rol) */
+    #menu .nav-item:not(.permitido) { display:none !important; }
+    body[data-exporta="0"] #btnImprimir, body[data-exporta="0"] #vBtnCsv, body[data-exporta="0"] #cBtnCsvCli,
+    body[data-exporta="0"] #cBtnCsvPlan, body[data-exporta="0"] #cBtnCsv, body[data-exporta="0"] #sBtnCsv,
+    body[data-exporta="0"] #tBtnCsv, body[data-exporta="0"] #lBtnCsv, body[data-exporta="0"] #aBtnCsv,
+    body[data-exporta="0"] #iBtnCsv, body[data-exporta="0"] .seg-exporta { display:none !important; }
+    body[data-carga="0"] #cFicha .c-form { display:none !important; }
+    .aviso-permiso { margin:0 0 12px; }
+    /* Seguridad */
+    .seg-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+    .seg-tab { background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--off-white); border-radius:8px; padding:8px 14px; font:inherit; font-size:13px; cursor:pointer; }
+    .seg-tab.activo { background:rgba(8,165,122,.18); border-color:rgba(8,165,122,.5); color:#fff; }
+    .seg-barra { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+    .seg-barra input, .seg-barra select { padding:8px 10px; font-size:13px; border-radius:7px; background:var(--navy-content); border:1.5px solid rgba(255,255,255,.1); color:var(--off-white); font-family:inherit; }
+    .seg-barra .crece { flex:1; min-width:180px; }
+    .seg-acciones { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .seg-grilla select { padding:6px 8px; font-size:13px; border-radius:7px; background:var(--navy-content); border:1.5px solid rgba(255,255,255,.1); color:var(--off-white); font-family:inherit; }
+    .seg-grilla td, .seg-grilla th { vertical-align:middle; }
+    .clave-temporal { font-family:Consolas, 'Courier New', monospace; font-size:22px; letter-spacing:1px; background:var(--navy-content); border:1px dashed rgba(255,255,255,.25); border-radius:10px; padding:14px; text-align:center; margin:14px 0 8px; user-select:all; word-break:break-all; }
+    .chip.temporal { background:rgba(255,184,0,.15); color:#ffcf5c; }
+    .modal .fila-roles { display:flex; gap:10px; }
+    .modal .fila-roles > * { flex:1; }

@@ -1,0 +1,667 @@
+<!-- ============ MODULO COBRANZAS · ANTIGÜEDAD DE DEUDA ============ -->
+<!-- Usa los estilos comunes de pantalla que define el módulo Ventas (.filtros, .kpis, .kpi, .tabs, .grilla-2…); acá solo van los propios. -->
+<style>
+  .c-nota { font-size:12px; color:var(--gray); margin:0 0 12px; line-height:1.5; }
+  .c-aviso { font-size:12px; color:var(--amber); margin:0 0 12px; line-height:1.5; }
+  .c-vistas { margin:2px 0 16px; }
+  .c-tramos { display:flex; height:30px; border-radius:6px; overflow:hidden; margin:4px 0 12px; background:rgba(255,255,255,.05); }
+  .c-tramos div { height:100%; cursor:pointer; }
+  .c-ley { display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
+  @media (max-width:1100px) { .c-ley { grid-template-columns:repeat(2,1fr); } }
+  .c-ley button { text-align:left; background:rgba(255,255,255,.04); border:1px solid var(--border); border-top:4px solid var(--c); border-radius:8px; padding:8px 10px; color:var(--off-white); cursor:pointer; font-size:12px; }
+  .c-ley button.on { outline:2px solid var(--c); }
+  .c-ley b { display:block; font-family:'Sora',sans-serif; font-size:14px; margin:2px 0; white-space:nowrap; }
+  .c-ley span { color:var(--gray); }
+  .c-barras { display:flex; flex-direction:column; gap:6px; }
+  .c-br { display:grid; grid-template-columns:minmax(120px,210px) 1fr 120px; gap:10px; align-items:center; font-size:12.5px; background:none; border:0; color:inherit; padding:2px 0; text-align:left; cursor:pointer; }
+  .c-br .et { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .c-br .p { height:12px; background:rgba(255,255,255,.06); border-radius:4px; overflow:hidden; display:flex; }
+  .c-br .p div { height:100%; }
+  .c-br .num { text-align:right; white-space:nowrap; }
+  .c-pill { display:inline-block; font-size:11px; font-weight:700; border-radius:10px; padding:1px 9px; white-space:nowrap; color:#0B2740; background:var(--c); }
+  .c-flag { display:inline-block; font-size:11px; border:1px solid var(--border); border-radius:10px; padding:0 7px; margin:2px 4px 0 0; color:var(--gray); }
+  .c-segs { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:16px; }
+  @media (max-width:1100px) { .c-segs { grid-template-columns:repeat(3,1fr); } }
+  .c-seg { text-align:left; background:var(--navy-card); border:1px solid var(--border); border-top:5px solid var(--c); border-radius:10px; padding:10px 12px; color:var(--off-white); cursor:pointer; }
+  .c-seg.on { outline:2px solid var(--c); }
+  .c-seg b { display:block; font-size:13px; } .c-seg .n { font-family:'Sora',sans-serif; font-size:20px; font-weight:700; } .c-seg span { font-size:11.5px; color:var(--gray); display:block; }
+  .c-lst { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px; font-size:12.5px; line-height:1.5; }
+  .c-check { list-style:none; margin:0; padding:0; }
+  .c-check li { display:grid; grid-template-columns:24px 1fr; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .c-check .i { font-weight:800; } .c-check .i.ok { color:var(--green-hover); } .c-check .i.mal { color:#ff8b8f; } .c-check .i.ad { color:var(--amber); }
+  .c-sube { color:#ff8b8f; } .c-baja { color:var(--green-hover); }
+  .c-ficha { max-width:900px; max-height:92vh; overflow-y:auto; }
+  .c-form { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .c-form .ancho { grid-column:1 / -1; }
+  @media (max-width:700px) { .c-form { grid-template-columns:1fr 1fr; } }
+  .c-form label { display:flex; flex-direction:column; gap:4px; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--gray); }
+  .c-form input, .c-form select, .c-form textarea { padding:8px 10px; font-size:13px; border-radius:7px; background:var(--navy-content); border:1.5px solid rgba(255,255,255,.1); color:var(--off-white); font-family:inherit; }
+  .c-form textarea { min-height:60px; resize:vertical; }
+  .c-hist { list-style:none; margin:12px 0 0; padding:0; display:flex; flex-direction:column; gap:10px; }
+  .c-hist li { border-left:3px solid var(--green); padding:2px 0 2px 12px; font-size:13px; }
+  .c-hist .f { font-size:11.5px; color:var(--gray); }
+  .c-kpis4 { grid-template-columns:repeat(4,1fr); }
+  @media (max-width:700px) { .c-kpis4 { grid-template-columns:repeat(2,1fr); } }
+</style>
+
+<section class="modulo" id="modCobranzas">
+  <div class="filtros">
+    <div class="fila-filtros">
+      <div class="filtro"><label for="cfCorteRapido">Fecha de corte</label>
+        <select id="cfCorteRapido"><option value="hoy">Hoy</option><option value="finmes">Fin del mes anterior</option><option value="custom">Elegir fecha</option></select></div>
+      <div class="filtro"><label for="cfCorte">Corte</label><input type="date" id="cfCorte"></div>
+      <div class="filtro"><label for="cfVendedor">Vendedor</label><select id="cfVendedor"></select></div>
+      <div class="filtro"><label for="cfSituacion">Situación</label>
+        <select id="cfSituacion"><option value="">Todos con saldo</option><option value="venc">Con deuda vencida</option><option value="m90">Con vencido de +90 días</option><option value="sinv">Sin deuda vencida</option><option value="favor">Con saldo a favor sin imputar</option></select></div>
+      <div class="filtro"><label for="cfPrioridad">Prioridad</label><select id="cfPrioridad"></select></div>
+      <div class="filtro"><label for="cfRegla">Vence el día del corte</label>
+        <select id="cfRegla"><option value="excel">Cuenta como vencido (como el Excel)</option><option value="no">Todavía no vencido</option></select></div>
+      <div class="filtro ancho"><label for="cbfTexto">Buscar</label><input type="text" id="cbfTexto" placeholder="Cliente, código o comprobante…"></div>
+    </div>
+    <div class="chips" id="cbChips"></div>
+  </div>
+
+  <div id="cbMensaje" class="mensaje oculto"></div>
+  <div id="cbCuerpo">
+    <div class="tabs c-vistas" id="cVistas"><button data-v="resumen" class="on">Resumen</button><button data-v="clientes">Clientes</button><button data-v="plan">Plan de cobranza</button><button data-v="control">Control de los datos</button></div>
+
+    <!-- RESUMEN -->
+    <div id="cvResumen">
+      <div class="c-nota" id="cNotaCorte"></div>
+      <div class="kpis" id="cbKpis"></div>
+      <div class="panel">
+        <h3><span>Deuda por antigüedad <span class="sub" id="cSubTramos"></span></span></h3>
+        <div class="c-tramos" id="cTramosBar"></div>
+        <div class="c-ley" id="cTramosLey"></div>
+        <div class="ayuda">Clic en un tramo: muestra los clientes con deuda en ese tramo. Días = fecha de corte − vencimiento (si la cuota no tiene vencimiento, la fecha de emisión).</div>
+      </div>
+      <div class="grilla-2">
+        <div class="panel">
+          <h3><span>Vencido a fin de cada mes <span class="sub">últimos 12 meses, reconstruido con la fecha de cada cobro</span></span></h3>
+          <div class="lienzo"><canvas id="cbChEvol" aria-label="Vencido por mes"></canvas></div>
+          <div class="ayuda">Barras: deuda vencida al último día de cada mes (y al corte). Así se ve si la cobranza mejora o empeora, sin pegar saldos a mano.</div>
+        </div>
+        <div class="panel">
+          <h3>Comparación del vencido</h3>
+          <div class="tabla-scroll"><table><thead><tr><th>Al</th><th class="num">Vencido</th><th class="num">+90 días</th><th class="num">Diferencia</th></tr></thead><tbody id="cTablaComp"></tbody></table></div>
+          <h3 style="margin-top:18px">Vencido por vendedor</h3>
+          <div class="c-barras" id="cPorVend"></div>
+        </div>
+      </div>
+      <div class="grilla-2">
+        <div class="panel"><h3>Clientes con más deuda vencida</h3><div class="c-barras" id="cTopVenc"></div></div>
+        <div class="panel">
+          <h3><span>Vence en los próximos 30 días <span class="sub" id="cSubProx"></span></span></h3>
+          <div class="tabla-scroll"><table><thead><tr><th>Vence</th><th>Cliente</th><th>Comprobante</th><th class="num">Pendiente</th></tr></thead><tbody id="cTablaProx"></tbody></table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLIENTES -->
+    <div id="cvClientes" class="oculto">
+      <div class="panel">
+        <h3><span>Clientes <span class="sub" id="cSubCli"></span></span><button class="btn secundario chico" id="cBtnCsvCli">Descargar CSV</button></h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr id="cCabCli"></tr></thead>
+          <tbody id="cTablaCli"></tbody><tfoot id="cPieCli"></tfoot></table></div>
+        <div class="ayuda">Clic en un cliente: cuotas pendientes, cobros y seguimiento. "A favor sin imputar" = recibos y notas de crédito que todavía no se aplicaron a ninguna factura (restan del saldo).</div>
+      </div>
+    </div>
+
+    <!-- PLAN -->
+    <div id="cvPlan" class="oculto">
+      <div class="c-nota">Propuesta de EMA: cada cliente queda en una prioridad según cuánto debe vencido, qué tan vieja es la deuda, si creció contra el mes anterior y cuánto pesa sobre lo que compra. Cada prioridad tiene una acción concreta. Los criterios están abajo.</div>
+      <div class="c-segs" id="cSegs"></div>
+      <div class="panel">
+        <h3><span>Clientes a gestionar <span class="sub" id="cSubPlan"></span></span><button class="btn secundario chico" id="cBtnCsvPlan">Descargar plan (CSV)</button></h3>
+        <div class="tabla-scroll"><table><thead><tr><th class="num">Puntaje</th><th>Prioridad</th><th>Cliente y acción</th><th class="num">Vencido</th><th class="num">+90</th><th>Último seguimiento</th></tr></thead><tbody id="cTablaPlan"></tbody></table></div>
+      </div>
+      <div class="grilla-2">
+        <div class="panel">
+          <h3>Compromisos de pago</h3>
+          <div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Cliente</th><th class="num">Monto</th><th>Estado</th></tr></thead><tbody id="cTablaComprom"></tbody></table></div>
+        </div>
+        <div class="panel">
+          <h3>Rutina semanal sugerida</h3>
+          <ul class="c-lst">
+            <li><b>Lunes:</b> llamar a los <b>críticos</b> (gerencia o responsable de la cuenta). Confirmar fecha y monto de pago.</li>
+            <li><b>Martes y miércoles:</b> llamar a los de prioridad <b>alta</b> y mandar estado de cuenta.</li>
+            <li><b>Jueves:</b> recordatorio por mail a prioridad <b>media</b> y aviso a los <b>preventivos</b> que vencen en 7 días.</li>
+            <li><b>Viernes:</b> imputar recibos y notas de crédito pendientes (saldo a favor) y revisar compromisos vencidos.</li>
+            <li><b>Fin de mes:</b> comparar el vencido contra el mes anterior en esta pantalla.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Cómo se calcula la prioridad</h3>
+        <ul class="c-lst">
+          <li><b>Puntaje (0 a 100)</b> = 45 % tamaño del vencido (contra el cliente que más debe) + 30 % antigüedad (parte del vencido con más de 60 días) + 15 % tendencia (si el vencido creció contra el mes anterior) + 10 % peso sobre las compras de los últimos 12 meses.</li>
+          <li><b>Crítico:</b> 1 % o más del vencido total y más de la mitad con más de 90 días.</li>
+          <li><b>Alto:</b> 1 % o más del vencido total, o vencido de más de 90 días por un monto relevante (0,1 % del total o más).</li>
+          <li><b>Medio:</b> resto de los clientes con deuda vencida.</li>
+          <li><b>Saldo chico antiguo:</b> menos de 0,05 % del vencido total y la mitad o más con más de 90 días: conciliar o depurar.</li>
+          <li><b>Preventivo:</b> sin vencido, con vencimientos en los próximos 30 días. <b>Al día:</b> nada vencido ni por vencer en 30 días.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- CONTROL -->
+    <div id="cvControl" class="oculto">
+      <div class="panel"><h3>Control de los datos <span class="sub">antes de mostrar un número, se controla que cierre</span></h3><ul class="c-check" id="cControles"></ul></div>
+    </div>
+  </div>
+</section>
+
+<div class="fondo-modal oculto" id="cFicha">
+  <div class="modal c-ficha" role="dialog" aria-modal="true" aria-labelledby="cFTit">
+    <h3 style="display:flex;justify-content:space-between;gap:10px"><span><span id="cFTit"></span><div class="gris" style="font-size:12px;font-weight:400;font-family:Inter,sans-serif" id="cFSub"></div></span><button class="btn secundario chico" id="cFCerrar">Cerrar</button></h3>
+    <div class="kpis c-kpis4" id="cFKpis" style="margin-top:12px"></div>
+    <div class="panel"><h3>Acción sugerida</h3><div id="cFAccion" style="font-size:13px;line-height:1.5"></div></div>
+    <div class="panel">
+      <h3>Seguimiento</h3>
+      <div class="c-form">
+        <label>Fecha<input type="date" id="csFecha"></label>
+        <label>Responsable<input type="text" id="csResp" maxlength="60"></label>
+        <label>Estado<select id="csEstado"><option>En gestión</option><option>Compromiso de pago</option><option>Plan de pagos</option><option>Pago sin imputar</option><option>Intimación / legal</option><option>Cancelado</option></select></label>
+        <label>Compromiso: fecha<input type="date" id="csCompF"></label>
+        <label class="ancho">Comentario<textarea id="csTexto" maxlength="1000"></textarea></label>
+        <label>Compromiso: monto<input type="number" id="csCompM" min="0" step="0.01"></label>
+        <div class="ancho" style="display:flex;justify-content:flex-end;gap:8px;align-items:center"><span class="gris" style="font-size:12px">Queda guardado en la base, con tu usuario. No se borra.</span><button class="btn chico" id="csGuardar">Agregar seguimiento</button></div>
+      </div>
+      <div id="csMensaje" class="mensaje oculto"></div>
+      <ul class="c-hist" id="cFHist"></ul>
+    </div>
+    <div class="panel">
+      <h3>Cuotas pendientes al corte</h3>
+      <div class="tabla-scroll"><table><thead><tr><th>Vence</th><th>Emitida</th><th>Comprobante</th><th class="num">Días</th><th>Tramo</th><th class="num">Cuota</th><th class="num">Cobrado</th><th class="num">Pendiente</th></tr></thead><tbody id="cFCuotas"></tbody></table></div>
+    </div>
+    <div class="panel" style="margin-bottom:0">
+      <h3>Últimos cobros</h3>
+      <div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Recibo / crédito</th><th>Aplicado a</th><th class="num">Importe</th></tr></thead><tbody id="cFCobros"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Lógica pura (se prueba sola). D = resultado de api_cobranzas_v2.
+  // Días: números de día desde 1970-01-01 (UTC), sin husos horarios.
+  // ---------------------------------------------------------------------------
+  var L = window.CobranzasLogica = {};
+  L.dia = function (s) { if (!s) return null; var p = String(s).slice(0, 10).split('-'); return Date.UTC(+p[0], +p[1] - 1, +p[2]) / 864e5; };
+  L.iso = function (d) { return d == null ? null : new Date(d * 864e5).toISOString().slice(0, 10); };
+  L.restarMeses = function (iso, n) {   // misma fecha n meses antes; si no existe ese día, el último del mes
+    var p = iso.split('-').map(Number), y = p[0], m = p[1] - n;
+    while (m < 1) { m += 12; y--; }
+    var ult = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return y + '-' + String(m).padStart(2, '0') + '-' + String(Math.min(p[2], ult)).padStart(2, '0');
+  };
+  L.finMesAnterior = function (iso) { var p = iso.split('-').map(Number); return new Date(Date.UTC(p[0], p[1] - 1, 0)).toISOString().slice(0, 10); };
+  L.TRAMOS = [
+    { k: 'm90', t: 'Vencido + de 90 días', c: '#E5484D', venc: true },
+    { k: 'd61', t: 'Vencido 61 a 90', c: '#E8743B', venc: true },
+    { k: 'd31', t: 'Vencido 31 a 60', c: '#E0A23B', venc: true },
+    { k: 'd1', t: 'Vencido 1 a 30', c: '#F2CF5B', venc: true },
+    { k: 'a30', t: 'Vence en 30 días', c: '#8FD8C2', venc: false },
+    { k: 'a60', t: 'Vence en 31 a 59', c: '#3FB58F', venc: false },
+    { k: 'a60m', t: 'Vence en 60 o más', c: '#1D8A6B', venc: false }
+  ];
+  L.tramo = function (k) {   // mismos cortes que la hoja BDD del Excel
+    if (k > 90) return 'm90'; if (k > 60) return 'd61'; if (k > 30) return 'd31'; if (k > 0) return 'd1';
+    if (k >= -30) return 'a30'; if (k > -60) return 'a60'; return 'a60m';
+  };
+  L.vacio = function () { var o = { total: 0, venc: 0, aVencer: 0 }; L.TRAMOS.forEach(function (t) { o[t.k] = 0; }); return o; };
+  function sumar(o, t, imp) { o[t] += imp; o.total += imp; if (t === 'm90' || t === 'd61' || t === 'd31' || t === 'd1') o.venc += imp; else o.aVencer += imp; }
+  function r2(x) { return Math.round(x * 100) / 100; }
+
+  // Pendiente de una cuota a la fecha de corte: importe − cobros con fecha <= corte. null si la factura todavía no existía.
+  L.pendiente = function (c, corte) {
+    if (c.fecha_emis && L.dia(c.fecha_emis) > corte) return null;
+    var ap = 0; (c.cobros || []).forEach(function (x) { if (L.dia(x[0]) <= corte) ap += +x[1]; });
+    var p = r2(+c.importe_vt - ap); return p > 0.005 ? p : 0;
+  };
+  L.dias = function (c, corte, reglaExcel) {
+    var f = L.dia(c.fecha_vto || c.fecha_emis); var k = f == null ? 0 : corte - f;
+    if (reglaExcel && k === 0) k = 1;   // =IF((corte-vto)=0,1,corte-vto)
+    return k;
+  };
+  // Foto de la deuda a una fecha: totales por tramo y por cliente.
+  L.foto = function (D, corteIso, reglaExcel) {
+    var corte = L.dia(corteIso), tot = L.vacio(), cli = {}, items = [];
+    (D.cuotas || []).forEach(function (c) {
+      var p = L.pendiente(c, corte); if (!p) return;
+      var k = L.dias(c, corte, reglaExcel), t = L.tramo(k);
+      var it = { c: c, pend: p, dias: k, tramo: t }; items.push(it);
+      sumar(tot, t, p);
+      var o = cli[c.cod_client] || (cli[c.cod_client] = L.vacio()); sumar(o, t, p);
+    });
+    return { corte: corteIso, tot: tot, cli: cli, items: items };
+  };
+  // Saldo de cuenta corriente a la fecha (débitos − créditos emitidos hasta el corte). Coincide con la ficha de Tango a hoy.
+  L.saldos = function (D, corteIso) {
+    var corte = L.dia(corteIso), s = {};
+    (D.comprobantes || []).forEach(function (x) { if (L.dia(x.fecha) <= corte) s[x.cod_client] = r2((s[x.cod_client] || 0) + (+x.importe)); });
+    return s;
+  };
+  L.ventas12 = function (D, corteIso) {
+    var hasta = corteIso.slice(0, 7), desde = L.restarMeses(corteIso, 11).slice(0, 7), s = {};
+    (D.ventas || []).forEach(function (v) { var m = String(v.mes).slice(0, 7); if (m >= desde && m <= hasta) s[v.cod_client] = (s[v.cod_client] || 0) + (+v.venta); });
+    return s;
+  };
+  L.SEGS = [
+    { k: 'critico', t: 'Crítico', c: '#E5484D', acc: 'Llamada de gerencia esta semana. Entregas solo contra pago. Proponer plan de pagos firmado; sin respuesta en 15 días, intimación formal.' },
+    { k: 'alto', t: 'Alto', c: '#E8743B', acc: 'Llamada del responsable de cobranzas y estado de cuenta por mail. Pedir fecha y monto comprometido. Seguimiento semanal.' },
+    { k: 'medio', t: 'Medio', c: '#E0A23B', acc: 'Mail con estado de cuenta y recordatorio. Seguimiento cada 15 días.' },
+    { k: 'chico', t: 'Saldo chico antiguo', c: '#9AAAB6', acc: 'Conciliar: puede ser un pago sin imputar o una diferencia. Reclamar o depurar.' },
+    { k: 'prev', t: 'Preventivo', c: '#6FA8F0', acc: 'Aviso unos días antes del vencimiento. Confirmar que la factura fue recibida y aprobada.' },
+    { k: 'ok', t: 'Al día', c: '#0BC492', acc: 'Sin acción: nada vencido ni por vencer en 30 días.' }
+  ];
+  L.seg = function (k) { for (var i = 0; i < L.SEGS.length; i++) if (L.SEGS[i].k === k) return L.SEGS[i]; return L.SEGS[5]; };
+  L.clasificar = function (c, totVenc, maxVenc) {
+    var share = totVenc ? c.venc / totVenc : 0, viejo = c.venc ? (c.m90 + c.d61) / c.venc : 0;
+    var tend = c.mes != null && c.venc > c.mes ? Math.min(1, (c.venc - c.mes) / Math.max(c.mes, c.venc * 0.25, 1)) : 0;
+    var rel = c.ventas12 > 0 ? Math.min(1, 2 * c.venc / c.ventas12) : 0;
+    c.puntaje = c.venc > 0 ? Math.round(100 * (0.45 * Math.sqrt(maxVenc ? c.venc / maxVenc : 0) + 0.30 * viejo + 0.15 * tend + 0.10 * rel)) : 0;
+    if (c.venc > 0) {
+      if (share >= 0.01 && c.m90 > 0.5 * c.venc) c.seg = 'critico';
+      else if (share >= 0.01 || (c.m90 > 0 && c.m90 >= 0.001 * totVenc)) c.seg = 'alto';
+      else if (share < 0.0005 && c.m90 > 0 && c.m90 >= 0.5 * c.venc) c.seg = 'chico';
+      else c.seg = 'medio';
+    } else c.seg = c.a30 > 0 ? 'prev' : 'ok';
+    return c;
+  };
+  // Todo junto: clientes con tramos al corte, mes y año anterior, saldo, a favor sin imputar, ventas y prioridad.
+  L.calcular = function (D, corteIso, reglaExcel) {
+    var f = L.foto(D, corteIso, reglaExcel), fm = L.foto(D, L.restarMeses(corteIso, 1), reglaExcel), fa = L.foto(D, L.restarMeses(corteIso, 12), reglaExcel);
+    var sal = L.saldos(D, corteIso), v12 = L.ventas12(D, corteIso), fichas = {};
+    (D.clientes || []).forEach(function (k) { fichas[k.cod_client] = k; });
+    var codigos = {}; Object.keys(f.cli).forEach(function (k) { codigos[k] = 1; }); Object.keys(sal).forEach(function (k) { if (Math.abs(sal[k]) > 0.005) codigos[k] = 1; });
+    var vendCuota = {}; f.items.forEach(function (it) { if (it.c.vendedor || it.c.cod_vended) vendCuota[it.c.cod_client] = it.c.vendedor || ('Vendedor ' + it.c.cod_vended); });
+    var lista = Object.keys(codigos).map(function (cod) {
+      var k = fichas[cod] || {}, b = f.cli[cod] || L.vacio();
+      var c = Object.assign({}, b, { cod: cod, nom: k.cliente || ('Cliente ' + cod), cuit: k.cuit || null, telefono: k.telefono || null, email: k.email || null,
+        vendedor: k.vendedor || (k.cod_vended ? 'Vendedor ' + k.cod_vended : null) || vendCuota[cod] || 'Sin vendedor',
+        saldo: sal[cod] || 0, saldo_ficha: k.saldo_ficha == null ? null : +k.saldo_ficha,
+        mes: fm.cli[cod] ? r2(fm.cli[cod].venc) : 0, anio: fa.cli[cod] ? r2(fa.cli[cod].venc) : 0,
+        m90mes: fm.cli[cod] ? r2(fm.cli[cod].m90) : 0, ventas12: r2(v12[cod] || 0) });
+      c.favor = r2(c.saldo - c.total);   // negativo: créditos sin imputar
+      c.difMes = r2(c.venc - c.mes);
+      var its = f.items.filter(function (it) { return it.c.cod_client === cod; }), pond = 0, vieja = null, parc = 0;
+      its.forEach(function (it) { if (it.dias > 0) { pond += it.pend * it.dias; if (vieja == null || it.dias > vieja) vieja = it.dias; } if (it.pend < +it.c.importe_vt - 0.005) parc++; });
+      c.items = its; c.diasProm = c.venc > 0 ? Math.round(pond / c.venc) : null; c.masVieja = vieja; c.parciales = parc;
+      c.mas365 = r2(its.filter(function (it) { return it.dias > 365; }).reduce(function (s, it) { return s + it.pend; }, 0));
+      return c;
+    });
+    var maxVenc = Math.max.apply(null, lista.map(function (c) { return c.venc; }).concat([0]));
+    lista.forEach(function (c) {
+      L.clasificar(c, f.tot.venc, maxVenc);
+      c.flags = [];
+      if (c.favor < -0.005 && c.venc > 0) c.flags.push('Tiene ' + Math.round(-c.favor).toLocaleString('es-AR') + ' a favor sin imputar: imputar antes de reclamar');
+      if (c.difMes > 0.005 && c.venc > 0) c.flags.push('El vencido creció contra el mes anterior');
+      if (c.parciales) c.flags.push(c.parciales + (c.parciales === 1 ? ' cuota con pago parcial' : ' cuotas con pago parcial'));
+      if (c.mas365 > 0) c.flags.push('Deuda de más de un año');
+    });
+    lista.sort(function (a, b) { return b.venc - a.venc || b.total - a.total || (a.nom < b.nom ? -1 : 1); });
+    return { corte: corteIso, tot: f.tot, items: f.items, clientes: lista, mes: { corte: fm.corte, tot: fm.tot }, anio: { corte: fa.corte, tot: fa.tot },
+      saldoTotal: r2(Object.keys(sal).reduce(function (s, k) { return s + sal[k]; }, 0)) };
+  };
+  // Vencido a fin de cada uno de los últimos n meses (y al corte).
+  L.serie = function (D, corteIso, reglaExcel, n) {
+    var out = [], base = corteIso.slice(0, 8) + '01';
+    for (var i = n; i >= 1; i--) out.push(L.finMesAnterior(L.restarMeses(base, i - 1)));
+    out = out.filter(function (x) { return x < corteIso; }); out.push(corteIso);
+    return out.map(function (f) { var t = L.foto(D, f, reglaExcel).tot; return { fecha: f, tot: t }; });
+  };
+
+  if (typeof window.document === 'undefined') return;
+
+  // ---------------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------------
+  var D = null, SEG = [], R = null, F = { corte: null, vendedor: '', situacion: '', prioridad: '', texto: '', tramo: '', regla: 'excel' }, vista = 'resumen', segSel = '', ABIERTO = null, graf = null;
+  var orden = { col: 'venc', dir: -1 };
+  var fmt$ = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+  var fmt$2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var fmtN = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  var fmtP = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
+  function g$(x) { return x == null || isNaN(x) ? '—' : fmt$.format(x); }
+  function pct(a, b) { return b ? fmtP.format(100 * a / b) + ' %' : '—'; }
+  function el(id) { return document.getElementById(id); }
+  function nuevo(tag, clase, texto) { var e = document.createElement(tag); if (clase) e.className = clase; if (texto != null) e.textContent = texto; return e; }
+  function fechaTxt(s) { if (!s) return '—'; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function hoyIso() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function td(tr, txt, cls) { var t = nuevo('td', cls, txt); tr.appendChild(t); return t; }
+  function pill(t, color) { var p = nuevo('span', 'c-pill', t); p.style.setProperty('--c', color); return p; }
+  function vacia(tb, n, txt) { var tr = nuevo('tr'), t = nuevo('td', 'gris', txt); t.colSpan = n; tr.appendChild(t); tb.appendChild(tr); }
+
+  window.MODULOS = window.MODULOS || {};
+  window.MODULOS.Cobranzas = { titulo: 'Cobranzas · Antigüedad de deuda', cargar: cargar };
+
+  var armado = false;
+  function cargar() {
+    if (D) { dibujar(); return; }
+    el('cbCuerpo').classList.add('cargando-suave');
+    Promise.all([sb.rpc('api_cobranzas_v2'), sb.rpc('api_cobranzas_seguimiento_v2'), sb.rpc('api_fecha_corte_v2')]).then(function (rs) {
+      el('cbCuerpo').classList.remove('cargando-suave');
+      var err = rs.map(function (r) { return r.error; }).filter(Boolean)[0];
+      if (err) { aviso('cbMensaje', 'No se pudo leer cobranzas: ' + textoError(err)); return; }
+      D = rs[0].data || {}; SEG = rs[1].data || [];
+      var fc = (!rs[2].error && rs[2].data && rs[2].data[0]) || {};
+      if (!armado) armarFiltros(fc.corte_recomendado ? String(fc.corte_recomendado).slice(0, 10) : null);
+      dibujar();
+    }).catch(function (e) { el('cbCuerpo').classList.remove('cargando-suave'); aviso('cbMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  var CORTE_DATOS = null;
+  function armarFiltros(corteDatos) {
+    armado = true; CORTE_DATOS = corteDatos;
+    F.corte = hoyIso(); el('cfCorte').value = F.corte;
+    if (corteDatos) { var o = new Option('Fecha de corte de los datos (' + fechaTxt(corteDatos) + ')', 'datos'); el('cfCorteRapido').insertBefore(o, el('cfCorteRapido').options[2]); }
+    var sp = el('cfPrioridad'); sp.innerHTML = ''; sp.appendChild(new Option('Todas', '')); L.SEGS.forEach(function (s) { sp.appendChild(new Option(s.t, s.k)); });
+    el('cfCorteRapido').addEventListener('change', function () {
+      var v = this.value; if (v === 'hoy') F.corte = hoyIso(); else if (v === 'finmes') F.corte = L.finMesAnterior(hoyIso()); else if (v === 'datos' && CORTE_DATOS) F.corte = CORTE_DATOS; else return;
+      el('cfCorte').value = F.corte; dibujar();
+    });
+    el('cfCorte').addEventListener('change', function () { if (!this.value) return; F.corte = this.value; el('cfCorteRapido').value = 'custom'; dibujar(); });
+    el('cfRegla').addEventListener('change', function () { F.regla = this.value; dibujar(); });
+    [['cfVendedor', 'vendedor'], ['cfSituacion', 'situacion'], ['cfPrioridad', 'prioridad']].forEach(function (p) { el(p[0]).addEventListener('change', function () { F[p[1]] = this.value; dibujarFiltrado(); }); });
+    var t = null; el('cbfTexto').addEventListener('input', function () { clearTimeout(t); var v = this.value; t = setTimeout(function () { F.texto = v; dibujarFiltrado(); }, 250); });
+    el('cVistas').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; vista = b.dataset.v; mostrarVista(); });
+    el('cBtnCsvCli').addEventListener('click', csvClientes);
+    el('cBtnCsvPlan').addEventListener('click', csvPlan);
+    el('cFCerrar').addEventListener('click', cerrarFicha);
+    el('cFicha').addEventListener('click', function (e) { if (e.target === el('cFicha')) cerrarFicha(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !el('cFicha').classList.contains('oculto')) cerrarFicha(); });
+    el('csGuardar').addEventListener('click', guardarSeguimiento);
+  }
+  function mostrarVista() {
+    el('cVistas').querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === vista); });
+    ['resumen', 'clientes', 'plan', 'control'].forEach(function (v) { el('cv' + v.charAt(0).toUpperCase() + v.slice(1)).classList.toggle('oculto', v !== vista); });
+  }
+
+  function dibujar() {
+    R = L.calcular(D, F.corte, F.regla === 'excel');
+    var sv = el('cfVendedor'), act = F.vendedor; sv.innerHTML = ''; sv.appendChild(new Option('Todos', ''));
+    var vs = {}; R.clientes.forEach(function (c) { vs[c.vendedor] = 1; }); Object.keys(vs).sort().forEach(function (v) { sv.appendChild(new Option(v, v)); });
+    sv.value = vs[act] ? act : ''; F.vendedor = sv.value;
+    dibujarFiltrado();
+    dibujarControl();
+  }
+  function filtrados() {
+    var q = (F.texto || '').trim().toLowerCase();
+    return R.clientes.filter(function (c) {
+      if (F.vendedor && c.vendedor !== F.vendedor) return false;
+      if (F.prioridad && c.seg !== F.prioridad) return false;
+      if (F.situacion === 'venc' && !(c.venc > 0)) return false;
+      if (F.situacion === 'm90' && !(c.m90 > 0)) return false;
+      if (F.situacion === 'sinv' && c.venc > 0) return false;
+      if (F.situacion === 'favor' && !(c.favor < -0.005)) return false;
+      if (F.tramo && !(c[F.tramo] > 0)) return false;
+      if (q && (c.nom + ' ' + c.cod + ' ' + c.items.map(function (it) { return it.c.n_comp; }).join(' ')).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+  function dibujarFiltrado() { chips(); var l = filtrados(); dibujarResumen(l); dibujarClientes(l); dibujarPlan(l); mostrarVista(); }
+
+  function chips() {
+    var c = el('cbChips'); c.innerHTML = '';
+    var nombres = { vendedor: 'Vendedor', situacion: 'Situación', prioridad: 'Prioridad', texto: 'Busca', tramo: 'Tramo' };
+    Object.keys(nombres).forEach(function (k) {
+      if (!F[k]) return; var txt = F[k];
+      if (k === 'prioridad') txt = L.seg(F[k]).t; if (k === 'tramo') txt = L.TRAMOS.filter(function (t) { return t.k === F[k]; })[0].t;
+      if (k === 'situacion') txt = el('cfSituacion').options[el('cfSituacion').selectedIndex].text;
+      var s = nuevo('span', 'chip-f', nombres[k] + ': ' + txt), b = nuevo('button', null, '×'); b.setAttribute('aria-label', 'Quitar filtro'); b.type = 'button';
+      b.addEventListener('click', function () { F[k] = ''; var ids = { vendedor: 'cfVendedor', situacion: 'cfSituacion', prioridad: 'cfPrioridad', texto: 'cbfTexto' }; if (ids[k]) el(ids[k]).value = ''; dibujarFiltrado(); });
+      s.appendChild(b); c.appendChild(s);
+    });
+  }
+  function totalesDe(l) { var t = L.vacio(); t.saldo = 0; t.favor = 0; l.forEach(function (c) { L.TRAMOS.forEach(function (x) { t[x.k] += c[x.k]; }); t.total += c.total; t.venc += c.venc; t.aVencer += c.aVencer; t.saldo += c.saldo; t.favor += Math.min(0, c.favor); }); return t; }
+  function kpi(cont, et, val, nota, malo) { var k = nuevo('div', 'kpi'); k.appendChild(nuevo('div', 'et', et)); var v = nuevo('div', 'val', val); if (malo) v.style.color = '#ff8b8f'; k.appendChild(v); if (nota) k.appendChild(nuevo('div', 'nota', nota)); cont.appendChild(k); }
+
+  function dibujarResumen(l) {
+    var t = totalesDe(l), k = el('cbKpis'); k.innerHTML = '';
+    var filtro = l.length !== R.clientes.length;
+    el('cNotaCorte').textContent = 'Deuda al ' + fechaTxt(R.corte) + (filtro ? ' · ' + l.length + ' de ' + R.clientes.length + ' clientes (filtrado)' : ' · ' + R.clientes.length + ' clientes con saldo') +
+      '. Cuotas pendientes de facturas y notas de débito; el saldo de cuenta corriente además resta recibos y notas de crédito sin imputar.';
+    kpi(k, 'Deuda en cuotas', g$(t.total), fmtN.format(l.reduce(function (s, c) { return s + c.items.length; }, 0)) + ' cuotas pendientes');
+    kpi(k, 'No vencido', g$(t.aVencer), pct(t.aVencer, t.total) + ' de la deuda');
+    kpi(k, 'Vencido', g$(t.venc), pct(t.venc, t.total) + ' de la deuda', t.venc > 0);
+    kpi(k, 'Vencido + de 90 días', g$(t.m90), pct(t.m90, t.venc) + ' del vencido', t.m90 > 0);
+    kpi(k, 'A favor sin imputar', g$(t.favor), 'recibos y notas de crédito sin aplicar');
+    kpi(k, 'Saldo de cuenta corriente', g$(t.saldo), 'deuda − a favor sin imputar');
+    var conV = l.filter(function (c) { return c.venc > 0; }).length;
+    kpi(k, 'Clientes con vencido', fmtN.format(conV), 'de ' + l.length + ' con saldo');
+    var sinFiltro = !F.vendedor && !F.prioridad && !F.situacion && !F.texto && !F.tramo;
+    var vMes = sinFiltro ? R.mes.tot.venc : l.reduce(function (s, c) { return s + c.mes; }, 0);
+    var dm = t.venc - vMes;
+    kpi(k, 'Vencido vs mes anterior', (dm > 0 ? '+' : '') + g$(dm), 'al ' + fechaTxt(R.mes.corte), dm > 0.005);
+
+    el('cSubTramos').textContent = g$(t.total) + ' en cuotas';
+    var bar = el('cTramosBar'), ley = el('cTramosLey'); bar.innerHTML = ''; ley.innerHTML = '';
+    L.TRAMOS.forEach(function (x) {
+      var d = nuevo('div'); d.style.width = (t.total ? 100 * t[x.k] / t.total : 0) + '%'; d.style.background = x.c; d.title = x.t + ': ' + g$(t[x.k]);
+      d.addEventListener('click', function () { filtrarTramo(x.k); }); bar.appendChild(d);
+      var b = nuevo('button', F.tramo === x.k ? 'on' : null); b.type = 'button'; b.style.setProperty('--c', x.c);
+      b.appendChild(nuevo('span', null, x.t)); b.appendChild(nuevo('b', null, g$(t[x.k]))); b.appendChild(nuevo('span', null, pct(t[x.k], t.total)));
+      b.addEventListener('click', function () { filtrarTramo(x.k); }); ley.appendChild(b);
+    });
+    // comparación
+    var tb = el('cTablaComp'); tb.innerHTML = '';
+    var cods = {}; l.forEach(function (c) { cods[c.cod] = 1; });
+    function fila(n, f, v, m) { var tr = nuevo('tr'); td(tr, n + ' ' + fechaTxt(f)); td(tr, g$(v), 'num'); td(tr, g$(m), 'num'); var dif = t.venc - v; var c = td(tr, n === 'Corte' ? '' : (dif > 0 ? '+' : '') + g$(dif), 'num ' + (dif > 0.005 ? 'c-sube' : dif < -0.005 ? 'c-baja' : '')); tb.appendChild(tr); }
+    fila('Corte', R.corte, t.venc, t.m90);
+    if (sinFiltro) { fila('Mes anterior', R.mes.corte, R.mes.tot.venc, R.mes.tot.m90); fila('Año anterior', R.anio.corte, R.anio.tot.venc, R.anio.tot.m90); }
+    else {
+      fila('Mes anterior', R.mes.corte, vMes, l.reduce(function (s, c) { return s + c.m90mes; }, 0));
+      var fa = L.foto(D, R.anio.corte, F.regla === 'excel'), va = 0, ma = 0; Object.keys(fa.cli).forEach(function (k) { if (cods[k]) { va += fa.cli[k].venc; ma += fa.cli[k].m90; } });
+      fila('Año anterior', R.anio.corte, va, ma);
+    }
+    // vendedor
+    var pv = {}; l.forEach(function (c) { pv[c.vendedor] = (pv[c.vendedor] || 0) + c.venc; });
+    barras(el('cPorVend'), Object.keys(pv).filter(function (v) { return pv[v] > 0.005; }).sort(function (a, b) { return pv[b] - pv[a]; }).map(function (v) { return { et: v, v: pv[v], clic: function () { F.vendedor = v; el('cfVendedor').value = v; dibujarFiltrado(); } }; }));
+    // top
+    barras(el('cTopVenc'), l.filter(function (c) { return c.venc > 0; }).slice().sort(function (a, b) { return b.venc - a.venc; }).slice(0, 10).map(function (c) { return { et: c.nom, v: c.venc, partes: c, clic: function () { abrirFicha(c); } }; }));
+    // próximos 30
+    var px = []; l.forEach(function (c) { c.items.forEach(function (it) { if (it.tramo === 'a30') px.push({ c: c, it: it }); }); });
+    px.sort(function (a, b) { return String(a.it.c.fecha_vto) < String(b.it.c.fecha_vto) ? -1 : 1; });
+    el('cSubProx').textContent = g$(px.reduce(function (s, x) { return s + x.it.pend; }, 0)) + ' en ' + px.length + ' cuotas';
+    var tp = el('cTablaProx'); tp.innerHTML = '';
+    px.slice(0, 15).forEach(function (x) { var tr = nuevo('tr', 'clic'); td(tr, fechaTxt(x.it.c.fecha_vto)); td(tr, x.c.nom); td(tr, x.it.c.t_comp + ' ' + x.it.c.n_comp + (x.it.c.cuotas > 1 ? ' (' + x.it.c.cuota + '/' + x.it.c.cuotas + ')' : '')); td(tr, g$(x.it.pend), 'num'); tr.addEventListener('click', function () { abrirFicha(x.c); }); tp.appendChild(tr); });
+    if (!px.length) vacia(tp, 4, 'No hay vencimientos en los próximos 30 días.');
+    if (px.length > 15) vacia(tp, 4, '… y ' + (px.length - 15) + ' más.');
+    dibujarEvol(l);
+  }
+  function filtrarTramo(k) { F.tramo = F.tramo === k ? '' : k; dibujarFiltrado(); }
+  function barras(cont, filas) {
+    cont.innerHTML = ''; var max = Math.max.apply(null, filas.map(function (f) { return f.v; }).concat([1]));
+    filas.forEach(function (f) {
+      var b = nuevo('button', 'c-br'); b.type = 'button'; b.title = f.et + ': ' + g$(f.v);
+      b.appendChild(nuevo('span', 'et', f.et)); var p = nuevo('div', 'p');
+      if (f.partes) { ['m90', 'd61', 'd31', 'd1'].forEach(function (k) { var x = nuevo('div'); x.style.width = (100 * f.partes[k] / max) + '%'; x.style.background = L.TRAMOS.filter(function (t) { return t.k === k; })[0].c; p.appendChild(x); }); }
+      else { var x = nuevo('div'); x.style.width = (100 * f.v / max) + '%'; x.style.background = '#E5484D'; p.appendChild(x); }
+      b.appendChild(p); b.appendChild(nuevo('span', 'num', g$(f.v))); if (f.clic) b.addEventListener('click', f.clic); cont.appendChild(b);
+    });
+    if (!filas.length) cont.appendChild(nuevo('div', 'gris', 'Sin deuda vencida.'));
+  }
+  function dibujarEvol(l) {
+    var cods = {}; l.forEach(function (c) { cods[c.cod] = 1; });
+    var Dl = { cuotas: (D.cuotas || []).filter(function (c) { return cods[c.cod_client]; }) };
+    var s = L.serie(Dl, R.corte, F.regla === 'excel', 12);
+    if (graf) { graf.destroy(); graf = null; }
+    if (typeof Chart === 'undefined') return;
+    var vencs = ['m90', 'd61', 'd31', 'd1'].map(function (k) { var t = L.TRAMOS.filter(function (x) { return x.k === k; })[0]; return { label: t.t, data: s.map(function (p) { return Math.round(p.tot[k]); }), backgroundColor: t.c, stack: 'v' }; });
+    graf = new Chart(el('cbChEvol'), { type: 'bar', data: { labels: s.map(function (p) { return fechaTxt(p.fecha).slice(0, 5) + (p.fecha === R.corte ? ' (corte)' : '/' + p.fecha.slice(2, 4)); }), datasets: vencs },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#7C93A3', boxWidth: 12 } }, tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + g$(c.raw); } } } },
+        scales: { x: { stacked: true, ticks: { color: '#7C93A3' }, grid: { color: 'rgba(255,255,255,0.07)' } }, y: { stacked: true, ticks: { color: '#7C93A3', callback: function (v) { return fmtN.format(v); } }, grid: { color: 'rgba(255,255,255,0.07)' } } } } });
+  }
+
+  // ---- clientes ----
+  var COL = [
+    { k: 'nom', t: 'Cliente' }, { k: 'seg', t: 'Prioridad' }, { k: 'aVencer', t: 'No vencido', n: 1 }, { k: 'd1', t: '1-30', n: 1 }, { k: 'd31', t: '31-60', n: 1 }, { k: 'd61', t: '61-90', n: 1 }, { k: 'm90', t: '+90', n: 1 },
+    { k: 'venc', t: 'Vencido', n: 1 }, { k: 'total', t: 'Deuda', n: 1 }, { k: 'favor', t: 'A favor sin imputar', n: 1 }, { k: 'saldo', t: 'Saldo cta. cte.', n: 1 },
+    { k: 'difMes', t: 'vs mes ant.', n: 1 }, { k: 'diasProm', t: 'Días prom.', n: 1 }, { k: 'ventas12', t: 'Ventas 12 m', n: 1 }, { k: 'seguim', t: 'Último seguimiento' }
+  ];
+  function ultimoSeg(cod) { for (var i = 0; i < SEG.length; i++) if (SEG[i].cod_client === cod) return SEG[i]; return null; }
+  function valor(c, k) { if (k === 'seg') return L.SEGS.indexOf(L.seg(c.seg)); if (k === 'seguim') { var u = ultimoSeg(c.cod); return u ? u.fecha : ''; } return c[k]; }
+  function dibujarClientes(l) {
+    var cab = el('cCabCli'); cab.innerHTML = '';
+    COL.forEach(function (c) { var h = nuevo('th', 'ord' + (c.n ? ' num' : ''), c.t + (orden.col === c.k ? (orden.dir > 0 ? ' ▲' : ' ▼') : '')); h.addEventListener('click', function () { orden = { col: c.k, dir: orden.col === c.k ? -orden.dir : (c.n ? -1 : 1) }; dibujarClientes(filtrados()); }); cab.appendChild(h); });
+    var lista = l.slice().sort(function (a, b) { var x = valor(a, orden.col), y = valor(b, orden.col); if (x == null) x = -Infinity; if (y == null) y = -Infinity; return (x > y ? 1 : x < y ? -1 : 0) * orden.dir; });
+    el('cSubCli').textContent = lista.length + ' clientes al ' + fechaTxt(R.corte);
+    var tb = el('cTablaCli'); tb.innerHTML = '';
+    lista.forEach(function (c) {
+      var tr = nuevo('tr', 'clic');
+      COL.forEach(function (col) {
+        var t;
+        if (col.k === 'nom') { t = td(tr, ''); t.appendChild(nuevo('div', null, c.nom)); t.appendChild(nuevo('div', 'gris', 'Cód. ' + c.cod + ' · ' + c.vendedor)); t.style.minWidth = '220px'; }
+        else if (col.k === 'seg') { t = td(tr, ''); var s = L.seg(c.seg); t.appendChild(pill(s.t, s.c)); }
+        else if (col.k === 'difMes') { t = td(tr, Math.abs(c.difMes) < 0.005 ? '0' : (c.difMes > 0 ? '+' : '') + g$(c.difMes), 'num ' + (c.difMes > 0.005 ? 'c-sube' : c.difMes < -0.005 ? 'c-baja' : '')); }
+        else if (col.k === 'diasProm') td(tr, c.diasProm == null ? '—' : fmtN.format(c.diasProm), 'num');
+        else if (col.k === 'seguim') { var u = ultimoSeg(c.cod); t = td(tr, u ? fechaTxt(u.fecha) + ' · ' + u.estado : '—'); t.style.minWidth = '160px'; t.style.fontSize = '12px'; }
+        else td(tr, Math.abs(c[col.k]) < 0.005 ? '0' : g$(c[col.k]), 'num');
+      });
+      tr.addEventListener('click', function () { abrirFicha(c); }); tb.appendChild(tr);
+    });
+    if (!lista.length) vacia(tb, COL.length, 'No hay clientes con estos filtros.');
+    var t = totalesDe(lista), pie = el('cPieCli'); pie.innerHTML = ''; var trp = nuevo('tr');
+    COL.forEach(function (col) { var x = col.k === 'nom' ? 'Total (' + lista.length + ')' : (col.n && t[col.k] != null ? g$(t[col.k]) : col.k === 'difMes' ? g$(lista.reduce(function (s, c) { return s + c.difMes; }, 0)) : col.k === 'ventas12' ? g$(lista.reduce(function (s, c) { return s + c.ventas12; }, 0)) : ''); var tt = td(trp, x, col.n ? 'num' : null); tt.style.fontWeight = '700'; });
+    pie.appendChild(trp);
+  }
+
+  // ---- plan ----
+  function dibujarPlan(l) {
+    var sc = el('cSegs'); sc.innerHTML = '';
+    L.SEGS.forEach(function (s) {
+      var ls = l.filter(function (c) { return c.seg === s.k; }), m = ls.reduce(function (x, c) { return x + (s.k === 'prev' ? c.a30 : c.venc); }, 0);
+      var b = nuevo('button', 'c-seg' + (segSel === s.k ? ' on' : '')); b.type = 'button'; b.style.setProperty('--c', s.c);
+      b.appendChild(nuevo('b', null, s.t)); b.appendChild(nuevo('div', 'n', String(ls.length))); b.appendChild(nuevo('span', null, s.k === 'ok' ? 'clientes' : (s.k === 'prev' ? 'vence en 30 días: ' : 'vencido: ') + g$(m)));
+      b.addEventListener('click', function () { segSel = segSel === s.k ? '' : s.k; dibujarPlan(filtrados()); }); sc.appendChild(b);
+    });
+    var tb = el('cTablaPlan'); tb.innerHTML = '';
+    var lp = l.filter(function (c) { return segSel ? c.seg === segSel : ['critico', 'alto', 'medio', 'chico'].indexOf(c.seg) >= 0; })
+      .sort(function (a, b) { return L.SEGS.indexOf(L.seg(a.seg)) - L.SEGS.indexOf(L.seg(b.seg)) || b.puntaje - a.puntaje || b.venc - a.venc; });
+    el('cSubPlan').textContent = lp.length + (segSel ? ' en ' + L.seg(segSel).t : ' con deuda vencida');
+    lp.forEach(function (c) {
+      var s = L.seg(c.seg), tr = nuevo('tr', 'clic');
+      td(tr, String(c.puntaje), 'num'); var t1 = td(tr, ''); t1.appendChild(pill(s.t, s.c));
+      var tn = td(tr, ''); tn.style.minWidth = '320px'; tn.appendChild(nuevo('div', null, c.nom)); tn.appendChild(nuevo('div', 'gris', s.acc)); c.flags.forEach(function (f) { tn.appendChild(nuevo('span', 'c-flag', f)); });
+      td(tr, g$(c.venc), 'num'); td(tr, g$(c.m90), 'num');
+      var u = ultimoSeg(c.cod); var t2 = td(tr, u ? fechaTxt(u.fecha) + ' · ' + u.estado + ': ' + u.texto.slice(0, 70) : 'Sin seguimiento'); t2.style.fontSize = '12px'; t2.style.minWidth = '160px';
+      tr.addEventListener('click', function () { abrirFicha(c); }); tb.appendChild(tr);
+    });
+    if (!lp.length) vacia(tb, 6, 'No hay clientes en esta prioridad.');
+    var tc = el('cTablaComprom'); tc.innerHTML = ''; var hoy = hoyIso(), noms = {}; R.clientes.forEach(function (c) { noms[c.cod] = c; });
+    var cm = SEG.filter(function (x) { return x.compromiso_fecha; }).slice().sort(function (a, b) { return a.compromiso_fecha < b.compromiso_fecha ? -1 : 1; });
+    cm.forEach(function (x) { var tr = nuevo('tr'); td(tr, fechaTxt(x.compromiso_fecha), x.compromiso_fecha < hoy ? 'c-sube' : null); td(tr, noms[x.cod_client] ? noms[x.cod_client].nom : 'Cliente ' + x.cod_client); td(tr, x.compromiso_monto != null ? g$(+x.compromiso_monto) : '—', 'num'); td(tr, x.estado); tc.appendChild(tr); });
+    if (!cm.length) vacia(tc, 4, 'Todavía no hay compromisos. Se cargan desde la ficha de cada cliente.');
+  }
+
+  // ---- ficha ----
+  function abrirFicha(c) {
+    ABIERTO = c; var s = L.seg(c.seg);
+    el('cFTit').textContent = c.nom;
+    el('cFSub').textContent = 'Código ' + c.cod + ' · ' + c.vendedor + (c.cuit ? ' · CUIT ' + c.cuit : '') + (c.telefono ? ' · Tel. ' + c.telefono : '') + (c.email ? ' · ' + c.email : '') + ' · corte ' + fechaTxt(R.corte);
+    var k = el('cFKpis'); k.innerHTML = '';
+    kpi(k, 'Deuda en cuotas', g$(c.total), c.items.length + ' cuotas');
+    kpi(k, 'Vencido', g$(c.venc), c.diasProm != null ? c.diasProm + ' días promedio' : 'nada vencido', c.venc > 0);
+    kpi(k, 'Saldo cta. cte.', g$(c.saldo), c.favor < -0.005 ? g$(-c.favor) + ' a favor sin imputar' : (c.saldo_ficha != null && Math.abs(c.saldo_ficha - c.saldo) > 0.005 && R.corte >= hoyIso() ? 'ficha de Tango: ' + g$(c.saldo_ficha) : ''));
+    kpi(k, 'Vs mes anterior', (c.difMes > 0 ? '+' : '') + g$(c.difMes), 'vencido al ' + fechaTxt(R.mes.corte) + ': ' + g$(c.mes), c.difMes > 0.005);
+    var a = el('cFAccion'); a.innerHTML = ''; a.appendChild(pill(s.t, s.c)); a.appendChild(document.createTextNode(' Puntaje ' + c.puntaje + '. ' + s.acc));
+    if (c.flags.length) { var ul = nuevo('ul', 'c-lst'); ul.style.marginTop = '8px'; c.flags.forEach(function (f) { ul.appendChild(nuevo('li', null, f)); }); a.appendChild(ul); }
+    if (c.ventas12) a.appendChild(nuevo('div', 'gris', 'Ventas de los últimos 12 meses (sin IVA): ' + g$(c.ventas12) + (c.venc ? ' · el vencido equivale al ' + pct(c.venc, c.ventas12) + '.' : '.')));
+    el('csFecha').value = hoyIso(); el('csTexto').value = ''; el('csCompF').value = ''; el('csCompM').value = ''; limpiarAviso('csMensaje');
+    dibujarHist();
+    var tb = el('cFCuotas'); tb.innerHTML = '';
+    c.items.slice().sort(function (x, y) { return y.dias - x.dias; }).forEach(function (it) {
+      var tr = nuevo('tr'), t = L.TRAMOS.filter(function (x) { return x.k === it.tramo; })[0];
+      td(tr, fechaTxt(it.c.fecha_vto)); td(tr, fechaTxt(it.c.fecha_emis)); td(tr, it.c.t_comp + ' ' + it.c.n_comp + (it.c.cuotas > 1 ? ' (' + it.c.cuota + '/' + it.c.cuotas + ')' : ''));
+      td(tr, fmtN.format(it.dias), 'num'); var tt = td(tr, ''); tt.appendChild(pill(t.t, t.c));
+      td(tr, g$(+it.c.importe_vt), 'num'); td(tr, g$(+it.c.importe_vt - it.pend), 'num'); td(tr, g$(it.pend), 'num'); tb.appendChild(tr);
+    });
+    if (!c.items.length) vacia(tb, 8, 'No tiene cuotas pendientes al corte.');
+    var cobros = [];
+    (D.cuotas || []).forEach(function (q) { if (q.cod_client !== c.cod) return; (q.cobros || []).forEach(function (x) { if (x[0] <= R.corte) cobros.push({ f: x[0], i: +x[1], t: x[2], n: x[3], a: q.t_comp + ' ' + q.n_comp + (q.cuotas > 1 ? ' (' + q.cuota + '/' + q.cuotas + ')' : '') }); }); });
+    cobros.sort(function (x, y) { return x.f < y.f ? 1 : -1; });
+    var tc = el('cFCobros'); tc.innerHTML = '';
+    cobros.slice(0, 12).forEach(function (x) { var tr = nuevo('tr'); td(tr, fechaTxt(x.f)); td(tr, x.t + ' ' + x.n); td(tr, x.a); td(tr, g$(x.i), 'num'); tc.appendChild(tr); });
+    if (!cobros.length) vacia(tc, 4, 'Sin cobros aplicados hasta el corte.');
+    el('cFicha').classList.remove('oculto');
+  }
+  function cerrarFicha() { el('cFicha').classList.add('oculto'); ABIERTO = null; }
+  function dibujarHist() {
+    var ul = el('cFHist'); ul.innerHTML = ''; var h = SEG.filter(function (x) { return x.cod_client === ABIERTO.cod; });
+    if (!h.length) ul.appendChild(nuevo('li', 'gris', 'Sin seguimiento cargado.'));
+    h.forEach(function (x) {
+      var li = nuevo('li');
+      li.appendChild(nuevo('div', 'f', fechaTxt(x.fecha) + ' · ' + (x.responsable || '—') + ' · ' + x.estado + (x.compromiso_fecha ? ' · compromiso ' + fechaTxt(x.compromiso_fecha) + (x.compromiso_monto != null ? ' por ' + g$(+x.compromiso_monto) : '') : '') + ' · cargó ' + (x.cargado_por || '—')));
+      li.appendChild(nuevo('div', null, x.texto)); ul.appendChild(li);
+    });
+  }
+  function guardarSeguimiento() {
+    if (!ABIERTO) return; var txt = el('csTexto').value.trim();
+    if (!txt) { aviso('csMensaje', 'Escribí el comentario.'); el('csTexto').focus(); return; }
+    var m = el('csCompM').value === '' ? null : Number(el('csCompM').value);
+    if (m != null && (isNaN(m) || m < 0)) { aviso('csMensaje', 'El monto tiene que ser un número positivo.'); return; }
+    var b = el('csGuardar'); b.disabled = true;
+    sb.rpc('api_cobranzas_seguimiento_agregar_v2', { p_cod_client: ABIERTO.cod, p_fecha: el('csFecha').value || hoyIso(), p_responsable: el('csResp').value.trim() || null,
+      p_estado: el('csEstado').value, p_texto: txt, p_compromiso_fecha: el('csCompF').value || null, p_compromiso_monto: m })
+      .then(function (r) {
+        if (r.error) { b.disabled = false; aviso('csMensaje', 'No se pudo guardar: ' + textoError(r.error)); return; }
+        return sb.rpc('api_cobranzas_seguimiento_v2').then(function (r2) {
+          b.disabled = false; if (!r2.error) SEG = r2.data || SEG;
+          el('csTexto').value = ''; el('csCompF').value = ''; el('csCompM').value = '';
+          aviso('csMensaje', 'Guardado.', 'ok'); dibujarHist(); dibujarFiltrado();
+        });
+      }).catch(function (e) { b.disabled = false; aviso('csMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  // ---- control ----
+  function pl(n, uno, varios) { return n + ' ' + (n === 1 ? uno : varios); }
+  function dibujarControl() {
+    var ul = el('cControles'); ul.innerHTML = '';
+    function it(est, t, d) { var li = nuevo('li'); li.appendChild(nuevo('span', 'i ' + est, est === 'ok' ? '✓' : est === 'mal' ? '✕' : '!')); var x = nuevo('div'); x.appendChild(nuevo('div', null, t)); if (d) x.appendChild(nuevo('div', 'gris', d)); li.appendChild(x); ul.appendChild(li); }
+    var t = R.tot, sumT = 0; L.TRAMOS.forEach(function (x) { sumT += t[x.k]; });
+    var sumIt = R.items.reduce(function (s, x) { return s + x.pend; }, 0);
+    it(Math.abs(sumT - sumIt) < 0.01 && Math.abs(sumT - t.total) < 0.01 ? 'ok' : 'mal', 'Cada cuota cae en un solo tramo: la suma de los tramos es igual a la deuda (' + fmt$2.format(t.total) + ').', 'Es la columna CONTROL de la hoja BDD del Excel, que tiene que dar 0.');
+    var sumCli = R.clientes.reduce(function (s, c) { return s + c.total; }, 0);
+    it(Math.abs(sumCli - t.total) < 0.01 ? 'ok' : 'mal', 'La suma por cliente es igual a la deuda total.');
+    var hoy = hoyIso();
+    var dif = R.clientes.filter(function (c) { return c.saldo_ficha != null && Math.abs(c.saldo_ficha - c.saldo) > 0.005; });
+    if (R.corte >= hoy) it(dif.length ? 'ad' : 'ok', dif.length ? pl(dif.length, 'cliente con saldo distinto al que guarda', 'clientes con saldo distinto al que guarda') + ' la ficha de Tango.' : 'El saldo de cada cliente coincide con la ficha de Tango.',
+      dif.length ? dif.map(function (c) { return c.nom + ': comprobantes ' + fmt$2.format(c.saldo) + ' / ficha ' + fmt$2.format(c.saldo_ficha); }).join(' · ') + '. La pantalla usa los comprobantes; la ficha puede estar desactualizada o tener un crédito asignado a otro cliente.' : '');
+    else it('ad', 'Corte en el pasado: la comparación con la ficha de Tango solo se hace con corte a hoy.');
+    var futuros = 0; (D.cuotas || []).forEach(function (q) { (q.cobros || []).forEach(function (x) { if (x[0] > hoy) futuros++; }); });
+    it(futuros ? 'ad' : 'ok', futuros ? pl(futuros, 'cobro con fecha posterior', 'cobros con fecha posterior') + ' a hoy (no cuenta hasta esa fecha).' : 'No hay cobros con fecha futura.');
+    var sinVto = (D.cuotas || []).filter(function (q) { return !q.fecha_vto; }).length;
+    it(sinVto ? 'ad' : 'ok', sinVto ? pl(sinVto, 'cuota sin fecha', 'cuotas sin fecha') + ' de vencimiento: se usa la de emisión (igual que el Excel).' : 'Todas las cuotas tienen fecha de vencimiento.');
+    var mas = (D.cuotas || []).filter(function (q) { return +q.aplicado > +q.importe_vt + 0.005; });
+    it(mas.length ? 'ad' : 'ok', mas.length ? pl(mas.length, 'cuota cobrada de más', 'cuotas cobradas de más') + ' (aplicado mayor que la cuota) por ' + fmt$2.format(mas.reduce(function (s, q) { return s + (+q.aplicado - +q.importe_vt); }, 0)) + '.' : 'Ninguna cuota tiene cobrado de más.', mas.length ? 'Se toman como canceladas (pendiente 0). Conviene revisarlas: puede ser una diferencia de cambio o una imputación mal hecha.' : '');
+    var inc = (D.cuotas || []).filter(function (q) { return q.estado_vto === 'PEN' && q.estado_comp === 'CAN'; });
+    if (inc.length) it('ad', pl(inc.length, 'cuota pendiente de una factura marcada', 'cuotas pendientes de facturas marcadas') + ' como cancelada en Tango.', inc.map(function (q) { return q.t_comp + ' ' + q.n_comp + ' vence ' + fechaTxt(q.fecha_vto); }).join(' · ') + '. Se muestran como deuda porque no tienen cobro aplicado.');
+    var sinV = R.clientes.filter(function (c) { return c.vendedor === 'Sin vendedor'; }).length;
+    it(sinV ? 'ad' : 'ok', sinV ? pl(sinV, 'cliente sin vendedor asignado.', 'clientes sin vendedor asignado.') : 'Todos los clientes tienen vendedor.');
+    var fav = R.clientes.filter(function (c) { return c.favor < -0.005; });
+    it(fav.length ? 'ad' : 'ok', fav.length ? pl(fav.length, 'cliente', 'clientes') + ' con recibos o notas de crédito sin imputar por ' + fmt$2.format(-fav.reduce(function (s, c) { return s + c.favor; }, 0)) + '.' : 'No hay créditos sin imputar.', fav.length ? 'La deuda por antigüedad muestra las cuotas; si esos créditos se imputan, el vencido baja. Imputarlos en Tango ordena la cuenta corriente.' : '');
+    var vieja = R.items.reduce(function (a, x) { return a == null || x.dias > a ? x.dias : a; }, null);
+    if (vieja != null) it('ok', 'Cuota pendiente más antigua: ' + fmtN.format(vieja) + ' días. Más de un año: ' + fmt$2.format(R.clientes.reduce(function (s, c) { return s + c.mas365; }, 0)) + '.');
+  }
+
+  // ---- CSV ----
+  function csv(nombre, filas) {
+    var txt = filas.map(function (f) { return f.map(function (v) { v = v == null ? '' : typeof v === 'number' ? String(Math.round(v * 100) / 100).replace('.', ',') : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(';'); }).join('\r\n');
+    var b = new Blob(['﻿' + txt], { type: 'text/csv;charset=utf-8' }), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = nombre; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function csvClientes() {
+    var f = [['Codigo', 'Cliente', 'Vendedor', 'Prioridad', 'Puntaje', 'No vencido', 'Vencido 1-30', 'Vencido 31-60', 'Vencido 61-90', 'Vencido +90', 'Vencido', 'Deuda', 'A favor sin imputar', 'Saldo cta cte', 'Vencido mes anterior', 'Dias promedio', 'Ventas 12 meses', 'Ultimo seguimiento']];
+    filtrados().forEach(function (c) { var u = ultimoSeg(c.cod); f.push([c.cod, c.nom, c.vendedor, L.seg(c.seg).t, c.puntaje, c.aVencer, c.d1, c.d31, c.d61, c.m90, c.venc, c.total, c.favor, c.saldo, c.mes, c.diasProm, c.ventas12, u ? u.fecha + ' ' + u.estado + ': ' + u.texto : '']); });
+    csv('cobranzas_clientes_' + R.corte + '.csv', f);
+  }
+  function csvPlan() {
+    var f = [['Prioridad', 'Puntaje', 'Codigo', 'Cliente', 'Vencido', 'Vencido +90', 'Accion', 'Senales', 'Ultimo seguimiento']];
+    filtrados().filter(function (c) { return ['critico', 'alto', 'medio', 'chico'].indexOf(c.seg) >= 0; }).sort(function (a, b) { return L.SEGS.indexOf(L.seg(a.seg)) - L.SEGS.indexOf(L.seg(b.seg)) || b.puntaje - a.puntaje; })
+      .forEach(function (c) { var u = ultimoSeg(c.cod); f.push([L.seg(c.seg).t, c.puntaje, c.cod, c.nom, c.venc, c.m90, L.seg(c.seg).acc, c.flags.join(' | '), u ? u.fecha + ' ' + u.texto : '']); });
+    csv('plan_cobranza_' + R.corte + '.csv', f);
+  }
+})();
+</script>

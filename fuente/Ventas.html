@@ -1,0 +1,458 @@
+<!-- ============ MODULO VENTAS ============ -->
+<style>
+  .filtros { position:sticky; top:0; z-index:5; background:var(--navy-content); padding:4px 0 14px; margin-bottom:6px; }
+  .fila-filtros { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+  .filtro { display:flex; flex-direction:column; gap:4px; min-width:130px; }
+  .filtro label { margin:0; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  .filtro select, .filtro input { padding:8px 10px; font-size:13px; border-radius:7px; }
+  .filtro.ancho { min-width:220px; flex:1; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; align-items:center; }
+  .chip-f { display:inline-flex; align-items:center; gap:6px; background:rgba(8,165,122,.15); color:var(--green-hover); border:1px solid rgba(8,165,122,.35); padding:3px 6px 3px 10px; border-radius:20px; font-size:12px; }
+  .chip-f button { background:none; border:none; color:inherit; cursor:pointer; font-size:14px; line-height:1; padding:0 2px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(165px,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi { background:var(--navy-card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+  .kpi .et { font-size:11px; color:var(--gray); text-transform:uppercase; letter-spacing:.6px; }
+  .kpi .val { font-family:'Sora',sans-serif; font-size:21px; font-weight:700; margin-top:6px; white-space:nowrap; }
+  .kpi .nota { font-size:11.5px; color:var(--gray); margin-top:4px; }
+  .grilla-2 { display:grid; grid-template-columns:3fr 2fr; gap:16px; }
+  @media (max-width: 1100px) { .grilla-2 { grid-template-columns:1fr; } }
+  .panel .sub { font-size:12px; color:var(--gray); font-weight:400; font-family:'Inter',sans-serif; }
+  .tabs { display:inline-flex; background:rgba(255,255,255,.05); border-radius:8px; padding:3px; gap:2px; }
+  .tabs button { background:none; border:none; color:var(--gray); padding:5px 10px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+  .tabs button.on { background:rgba(8,165,122,.2); color:var(--green-hover); }
+  .lienzo { position:relative; height:300px; }
+  .lienzo.alto { height:360px; }
+  .ayuda { font-size:11.5px; color:var(--gray); margin-top:8px; }
+  th.ord { cursor:pointer; user-select:none; }
+  th.ord:hover { color:var(--off-white); }
+  td.num, th.num { text-align:right; white-space:nowrap; }
+  tr.clic { cursor:pointer; }
+  tr.clic:hover td { background:rgba(255,255,255,.03); }
+  .pie-tabla { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap; font-size:12.5px; color:var(--gray); }
+  .neg { color:#ff8b8f; }
+  .aviso-costo { font-size:12px; color:var(--amber); margin-top:6px; }
+  .cargando-suave { opacity:.45; transition:opacity .2s; }
+</style>
+
+<section class="modulo" id="modVentas">
+  <div class="filtros">
+    <div class="fila-filtros">
+      <div class="filtro"><label for="vfPeriodo">Período</label>
+        <select id="vfPeriodo"></select></div>
+      <div class="filtro"><label for="vfDesde">Desde</label><input type="date" id="vfDesde"></div>
+      <div class="filtro"><label for="vfHasta">Hasta</label><input type="date" id="vfHasta"></div>
+      <div class="filtro"><label for="vfCliente">Cliente</label><select id="vfCliente"></select></div>
+      <div class="filtro"><label for="vfVendedor">Vendedor</label><select id="vfVendedor"></select></div>
+      <div class="filtro"><label for="vfProvincia">Provincia</label><select id="vfProvincia"></select></div>
+      <div class="filtro"><label for="vfArticulo">Artículo</label><select id="vfArticulo"></select></div>
+      <div class="filtro"><label for="vfTipo">Comprobante</label><select id="vfTipo"></select></div>
+      <div class="filtro"><label for="vfCosto">Costo</label>
+        <select id="vfCosto"><option value="">Todos</option><option value="con">Con costo</option><option value="sin">Sin costo</option></select></div>
+      <div class="filtro ancho"><label for="vfTexto">Buscar</label><input type="text" id="vfTexto" placeholder="Cliente, artículo, número de comprobante…"></div>
+    </div>
+    <div class="chips" id="vChips"></div>
+  </div>
+
+  <div id="vMensaje" class="mensaje oculto"></div>
+  <div id="vCuerpo">
+    <div class="kpis" id="vKpis"></div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Evolución mensual <span class="sub" id="vSubEvol"></span></span>
+          <span class="tabs" id="vTabsEvol">
+            <button data-m="venta" class="on">Venta</button><button data-m="margen">Margen</button><button data-m="unidades">Unidades</button><button data-m="comprobantes">Comprobantes</button>
+          </span></h3>
+        <div class="lienzo"><canvas id="vChEvol" aria-label="Evolución mensual"></canvas></div>
+        <div class="ayuda">Clic en una barra: filtra ese mes. Pasá el mouse para ver el valor.</div>
+      </div>
+      <div class="panel">
+        <h3><span>Ranking <span class="sub">top 10</span></span>
+          <span class="tabs" id="vTabsRank">
+            <button data-d="cliente" class="on">Clientes</button><button data-d="articulo">Artículos</button><button data-d="vendedor">Vendedores</button><button data-d="provincia">Provincias</button>
+          </span></h3>
+        <div class="lienzo alto"><canvas id="vChRank" aria-label="Ranking"></canvas></div>
+        <div class="ayuda">Clic en una barra: filtra por ese elemento.</div>
+      </div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3>Por tipo de comprobante</h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Tipo</th><th class="num">Comprobantes</th><th class="num">Renglones</th><th class="num">Importe</th><th class="num">Participación</th></tr></thead>
+          <tbody id="vTablaTipo"></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h3>Margen y cobertura de costo</h3>
+        <div id="vMargenDet"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><span>Detalle de renglones <span class="sub" id="vSubDet"></span></span>
+        <button class="btn secundario chico" id="vBtnCsv">Descargar CSV</button></h3>
+      <div class="tabla-scroll"><table>
+        <thead><tr id="vCabDet"></tr></thead>
+        <tbody id="vTablaDet"></tbody></table></div>
+      <div class="pie-tabla"><span id="vPagInfo"></span>
+        <span><button class="btn secundario chico" id="vPagAnt">‹ Anterior</button> <button class="btn secundario chico" id="vPagSig">Siguiente ›</button></span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Lógica pura (sin pantalla): se prueba aparte con los mismos datos de la base.
+  // ---------------------------------------------------------------------------
+  var V = window.VentasLogica = {};
+
+  V.filtrar = function (lineas, f) {
+    var txt = (f.texto || '').trim().toLowerCase();
+    return lineas.filter(function (l) {
+      if (f.desde && l.fecha < f.desde) return false;
+      if (f.hasta && l.fecha > f.hasta) return false;
+      if (f.cliente && l.cod_client !== f.cliente) return false;
+      if (f.vendedor && l.cod_vended !== f.vendedor) return false;
+      if (f.provincia && l.provincia !== f.provincia) return false;
+      if (f.articulo && l.cod_articu !== f.articulo) return false;
+      if (f.tipo && l.tipo_comprobante !== f.tipo) return false;
+      if (f.costo === 'con' && !l.tiene_costo) return false;
+      if (f.costo === 'sin' && l.tiene_costo) return false;
+      if (txt) {
+        var h = (l.cliente + ' ' + l.articulo + ' ' + l.cod_articu + ' ' + l.n_comp + ' ' + l.vendedor).toLowerCase();
+        if (h.indexOf(txt) < 0) return false;
+      }
+      return true;
+    });
+  };
+
+  function r2(x) { return Math.round(x * 100) / 100; }
+
+  V.kpis = function (ls) {
+    var venta = 0, unid = 0, ventaCosto = 0, costo = 0, margen = 0, absTot = 0, absCosto = 0, comp = {}, cli = {};
+    ls.forEach(function (l) {
+      venta += +l.venta; unid += +l.cantidad; absTot += Math.abs(+l.venta);
+      comp[l.t_comp + '|' + l.n_comp] = 1; cli[l.cod_client] = 1;
+      if (l.tiene_costo) { ventaCosto += +l.venta; costo += +l.costo; margen += +l.margen; absCosto += Math.abs(+l.venta); }
+    });
+    var nComp = Object.keys(comp).length;
+    return { venta: r2(venta), unidades: r2(unid), comprobantes: nComp, clientes: Object.keys(cli).length, renglones: ls.length,
+      ticket: nComp ? r2(venta / nComp) : 0, venta_con_costo: r2(ventaCosto), costo: r2(costo), margen: r2(margen),
+      margen_pct: ventaCosto ? Math.round(1000 * margen / ventaCosto) / 10 : null,
+      cobertura_pct: absTot ? Math.round(1000 * absCosto / absTot) / 10 : null };
+  };
+
+  V.porMes = function (ls) {
+    var m = {};
+    ls.forEach(function (l) {
+      var k = l.fecha.slice(0, 7);
+      if (!m[k]) m[k] = { mes: k, venta: 0, margen: 0, unidades: 0, comp: {} };
+      m[k].venta += +l.venta; m[k].unidades += +l.cantidad; if (l.tiene_costo) m[k].margen += +l.margen;
+      m[k].comp[l.t_comp + '|' + l.n_comp] = 1;
+    });
+    return Object.keys(m).sort().map(function (k) {
+      return { mes: k, venta: r2(m[k].venta), margen: r2(m[k].margen), unidades: r2(m[k].unidades), comprobantes: Object.keys(m[k].comp).length };
+    });
+  };
+
+  V.ranking = function (ls, dim, n) {
+    var clave = { cliente: 'cod_client', articulo: 'cod_articu', vendedor: 'cod_vended', provincia: 'provincia' }[dim];
+    var nombre = { cliente: 'cliente', articulo: 'articulo', vendedor: 'vendedor', provincia: 'provincia' }[dim];
+    var g = {};
+    ls.forEach(function (l) {
+      var k = l[clave] == null ? '' : String(l[clave]);
+      if (!g[k]) g[k] = { clave: k, nombre: l[nombre], venta: 0 };
+      g[k].venta += +l.venta;
+    });
+    var arr = Object.keys(g).map(function (k) { g[k].venta = r2(g[k].venta); return g[k]; })
+      .sort(function (a, b) { return b.venta - a.venta; });
+    if (arr.length > n) {
+      var resto = arr.slice(n).reduce(function (s, x) { return s + x.venta; }, 0);
+      arr = arr.slice(0, n); arr.push({ clave: null, nombre: 'Otros (' + (Object.keys(g).length - n) + ')', venta: r2(resto) });
+    }
+    return arr;
+  };
+
+  V.porTipo = function (ls) {
+    var g = {}, total = 0;   // participación sobre el total en valor absoluto (las notas de crédito restan en la venta neta)
+    ls.forEach(function (l) {
+      var k = l.tipo_comprobante;
+      if (!g[k]) g[k] = { tipo: k, comp: {}, renglones: 0, importe: 0 };
+      g[k].comp[l.t_comp + '|' + l.n_comp] = 1; g[k].renglones++; g[k].importe += +l.venta; total += Math.abs(+l.venta);
+    });
+    return Object.keys(g).map(function (k) {
+      return { tipo: k, comprobantes: Object.keys(g[k].comp).length, renglones: g[k].renglones, importe: r2(g[k].importe),
+        pct: total ? Math.round(1000 * Math.abs(g[k].importe) / total) / 10 : null };
+    }).sort(function (a, b) { return b.importe - a.importe; });
+  };
+
+  if (typeof window.document === 'undefined') return;   // en la prueba de node solo se usa la lógica
+
+  // ---------------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------------
+  var DATOS = null, F = {}, graf = {}, metrica = 'venta', dimRank = 'cliente', orden = { col: 'fecha', dir: -1 }, pagina = 0, POR_PAG = 25;
+  var COL = { azul: '#3987e5', naranja: '#d95926', aqua: '#199e70', rojo: '#e66767', grilla: 'rgba(255,255,255,0.07)', texto: '#7C93A3', claro: '#F2F5F3' };
+  var fmt$ = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+  var fmtN = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  var fmtD = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
+  function g$(x) { return x == null ? '—' : fmt$.format(x); }
+  function el(id) { return document.getElementById(id); }
+  function fechaTxt(s) { if (!s) return '—'; var p = s.slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function mesTxt(k) { var n = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return n[+k.slice(5, 7) - 1] + ' ' + k.slice(2, 4); }
+  function nuevo(tag, clase, texto) { var e = document.createElement(tag); if (clase) e.className = clase; if (texto != null) e.textContent = texto; return e; }
+
+  window.MODULOS = window.MODULOS || {};
+  window.MODULOS.Ventas = { titulo: 'Ventas', cargar: cargar };
+
+  // Filtro que llega desde el Radar (clic en un cliente, artículo, mes…): se aplica al abrir la pantalla.
+  function aplicarPendiente() {
+    var p = window.__filtroPendiente; if (!p || p.modulo !== 'Ventas') return;
+    window.__filtroPendiente = null; F = {}; pagina = 0;
+    ['vfDesde', 'vfHasta', 'vfCliente', 'vfVendedor', 'vfProvincia', 'vfArticulo', 'vfTipo', 'vfCosto', 'vfTexto'].forEach(function (i) { el(i).value = ''; });
+    var ids = { desde: 'vfDesde', hasta: 'vfHasta', cliente: 'vfCliente', vendedor: 'vfVendedor', provincia: 'vfProvincia', articulo: 'vfArticulo', tipo: 'vfTipo', costo: 'vfCosto', texto: 'vfTexto' };
+    Object.keys(p.f || {}).forEach(function (k) { if (ids[k] && p.f[k] != null) { F[k] = p.f[k]; el(ids[k]).value = p.f[k]; } });
+    el('vfPeriodo').value = (F.desde || F.hasta) ? 'custom' : 'todo';
+  }
+
+  function cargar() {
+    if (DATOS) { aplicarPendiente(); dibujar(); return; }
+    el('vCuerpo').classList.add('cargando-suave');
+    sb.rpc('api_ventas_lineas_v2', {}).then(function (r) {
+      el('vCuerpo').classList.remove('cargando-suave');
+      if (r.error) { aviso('vMensaje', 'No se pudieron leer las ventas: ' + textoError(r.error)); return; }
+      DATOS = (r.data || []).map(function (l) { l.fecha = String(l.fecha).slice(0, 10); return l; });
+      armarFiltros(); aplicarPendiente(); dibujar();
+    }).catch(function (e) { el('vCuerpo').classList.remove('cargando-suave'); aviso('vMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  function opciones(sel, pares, todos) {
+    sel.innerHTML = ''; sel.appendChild(new Option(todos, ''));
+    pares.forEach(function (p) { sel.appendChild(new Option(p[1], p[0])); });
+  }
+  function unicos(clave, nombre) {
+    var m = {}; DATOS.forEach(function (l) { if (l[clave] != null) m[l[clave]] = l[nombre]; });
+    return Object.keys(m).map(function (k) { return [k, m[k]]; }).sort(function (a, b) { return String(a[1]).localeCompare(String(b[1])); });
+  }
+
+  function armarFiltros() {
+    var fechas = DATOS.map(function (l) { return l.fecha; }).sort();
+    var min = fechas[0], max = fechas[fechas.length - 1];
+    el('vfDesde').min = el('vfHasta').min = min; el('vfDesde').max = el('vfHasta').max = max;
+    var anios = {}; DATOS.forEach(function (l) { anios[l.fecha.slice(0, 4)] = 1; });
+    var per = [['todo', 'Todo (' + fechaTxt(min) + ' al ' + fechaTxt(max) + ')'], ['12m', 'Últimos 12 meses con datos'], ['6m', 'Últimos 6 meses con datos']];
+    Object.keys(anios).sort().reverse().forEach(function (a) { per.push(['a' + a, 'Año ' + a]); });
+    per.push(['custom', 'Personalizado']);
+    var sp = el('vfPeriodo'); sp.innerHTML = ''; per.forEach(function (p) { sp.appendChild(new Option(p[1], p[0])); });
+    opciones(el('vfCliente'), unicos('cod_client', 'cliente'), 'Todos');
+    opciones(el('vfVendedor'), unicos('cod_vended', 'vendedor'), 'Todos');
+    opciones(el('vfProvincia'), unicos('provincia', 'provincia'), 'Todas');
+    opciones(el('vfArticulo'), unicos('cod_articu', 'articulo'), 'Todos');
+    opciones(el('vfTipo'), unicos('tipo_comprobante', 'tipo_comprobante'), 'Todos');
+    V._max = max; V._min = min;
+
+    sp.addEventListener('change', function () {
+      var v = sp.value, d = null, h = null;
+      if (v === '12m' || v === '6m') { var n = v === '12m' ? 12 : 6; var x = new Date(max + 'T00:00:00'); x.setMonth(x.getMonth() - n); x.setDate(x.getDate() + 1); d = x.toISOString().slice(0, 10); h = max; }
+      else if (v.charAt(0) === 'a') { d = v.slice(1) + '-01-01'; h = v.slice(1) + '-12-31'; }
+      else if (v === 'custom') { return; }
+      F.desde = d; F.hasta = h; el('vfDesde').value = d || ''; el('vfHasta').value = h || ''; pagina = 0; dibujar();
+    });
+    [['vfDesde', 'desde'], ['vfHasta', 'hasta']].forEach(function (p) {
+      el(p[0]).addEventListener('change', function () { F[p[1]] = el(p[0]).value || null; el('vfPeriodo').value = 'custom'; pagina = 0; dibujar(); });
+    });
+    [['vfCliente', 'cliente'], ['vfVendedor', 'vendedor'], ['vfProvincia', 'provincia'], ['vfArticulo', 'articulo'], ['vfTipo', 'tipo'], ['vfCosto', 'costo']].forEach(function (p) {
+      el(p[0]).addEventListener('change', function () { F[p[1]] = el(p[0]).value || null; pagina = 0; dibujar(); });
+    });
+    var t = null;
+    el('vfTexto').addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { F.texto = el('vfTexto').value; pagina = 0; dibujar(); }, 250); });
+    el('vTabsEvol').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; metrica = b.dataset.m; marcarTab('vTabsEvol', b); dibujarEvol(V.filtrar(DATOS, F)); });
+    el('vTabsRank').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; dimRank = b.dataset.d; marcarTab('vTabsRank', b); dibujarRank(V.filtrar(DATOS, F)); });
+    el('vPagAnt').addEventListener('click', function () { if (pagina > 0) { pagina--; dibujarDetalle(V.filtrar(DATOS, F)); } });
+    el('vPagSig').addEventListener('click', function () { pagina++; dibujarDetalle(V.filtrar(DATOS, F)); });
+    el('vBtnCsv').addEventListener('click', descargarCsv);
+  }
+
+  function marcarTab(id, b) { el(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); }
+
+  function ponerFiltro(clave, valor) {
+    F[clave] = valor; pagina = 0;
+    var mapa = { cliente: 'vfCliente', vendedor: 'vfVendedor', provincia: 'vfProvincia', articulo: 'vfArticulo', tipo: 'vfTipo', costo: 'vfCosto' };
+    if (mapa[clave]) el(mapa[clave]).value = valor || '';
+    dibujar();
+  }
+
+  function dibujarChips() {
+    var c = el('vChips'); c.innerHTML = '';
+    var nombres = { desde: 'Desde', hasta: 'Hasta', cliente: 'Cliente', vendedor: 'Vendedor', provincia: 'Provincia', articulo: 'Artículo', tipo: 'Comprobante', costo: 'Costo', texto: 'Buscar' };
+    var selTxt = { cliente: 'vfCliente', vendedor: 'vfVendedor', articulo: 'vfArticulo' };
+    var hay = false;
+    Object.keys(nombres).forEach(function (k) {
+      if (!F[k]) return; hay = true;
+      var v = F[k];
+      if (selTxt[k]) { var s = el(selTxt[k]); v = s.options[s.selectedIndex] ? s.options[s.selectedIndex].text : v; }
+      if (k === 'desde' || k === 'hasta') v = fechaTxt(v);
+      if (k === 'costo') v = v === 'con' ? 'Con costo' : 'Sin costo';
+      var ch = nuevo('span', 'chip-f', nombres[k] + ': ' + v);
+      var x = nuevo('button', null, '×'); x.title = 'Quitar';
+      x.addEventListener('click', function () {
+        F[k] = null;
+        var ids = { desde: 'vfDesde', hasta: 'vfHasta', cliente: 'vfCliente', vendedor: 'vfVendedor', provincia: 'vfProvincia', articulo: 'vfArticulo', tipo: 'vfTipo', costo: 'vfCosto', texto: 'vfTexto' };
+        el(ids[k]).value = ''; if (k === 'desde' || k === 'hasta') el('vfPeriodo').value = 'custom';
+        pagina = 0; dibujar();
+      });
+      ch.appendChild(x); c.appendChild(ch);
+    });
+    if (hay) {
+      var lim = nuevo('button', 'btn secundario chico', 'Limpiar todo');
+      lim.addEventListener('click', function () {
+        F = {}; ['vfDesde', 'vfHasta', 'vfCliente', 'vfVendedor', 'vfProvincia', 'vfArticulo', 'vfTipo', 'vfCosto', 'vfTexto'].forEach(function (i) { el(i).value = ''; });
+        el('vfPeriodo').value = 'todo'; pagina = 0; dibujar();
+      });
+      c.appendChild(lim);
+    }
+  }
+
+  function dibujar() {
+    var ls = V.filtrar(DATOS, F);
+    // cada parte por separado: si una falla (por ejemplo, no cargó la librería de gráficos) el resto se sigue viendo
+    [dibujarChips, dibujarKpis, dibujarEvol, dibujarRank, dibujarTipo, dibujarMargen, dibujarDetalle].forEach(function (fn) {
+      try { fn(ls); } catch (e) { console.error(e); aviso('vMensaje', 'Una parte de la pantalla no se pudo dibujar: ' + e.message); }
+    });
+  }
+
+  function tarjeta(cont, et, val, nota, clase) {
+    var t = nuevo('div', 'kpi'); t.appendChild(nuevo('div', 'et', et));
+    var v = nuevo('div', 'val' + (clase ? ' ' + clase : ''), val); t.appendChild(v);
+    if (nota) t.appendChild(nuevo('div', 'nota', nota));
+    cont.appendChild(t);
+  }
+
+  function dibujarKpis(ls) {
+    var k = V.kpis(ls), c = el('vKpis'); c.innerHTML = '';
+    tarjeta(c, 'Venta neta', g$(k.venta), 'sin impuestos, notas de crédito restadas', k.venta < 0 ? 'neg' : '');
+    tarjeta(c, 'Comprobantes', fmtN.format(k.comprobantes), fmtN.format(k.renglones) + ' renglones');
+    tarjeta(c, 'Clientes', fmtN.format(k.clientes));
+    tarjeta(c, 'Ticket promedio', g$(k.ticket), 'venta neta / comprobantes');
+    tarjeta(c, 'Unidades', fmtD.format(k.unidades));
+    tarjeta(c, 'Margen', k.margen_pct == null ? '—' : fmtD.format(k.margen_pct) + ' %', g$(k.margen) + ' sobre la venta con costo', k.margen < 0 ? 'neg' : '');
+    tarjeta(c, 'Cobertura de costo', k.cobertura_pct == null ? '—' : fmtD.format(k.cobertura_pct) + ' %', 'de los importes tiene costo válido');
+    el('vSubDet').textContent = '· ' + fmtN.format(ls.length) + ' renglones';
+  }
+
+  function opcionesBase(extra) {
+    var o = { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#09233A', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, titleColor: COL.texto, bodyColor: COL.claro, bodyFont: { weight: '600' }, padding: 10, displayColors: false } },
+      scales: { x: { grid: { display: false }, ticks: { color: COL.texto, font: { size: 11 } }, border: { color: 'rgba(255,255,255,.12)' } },
+                y: { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 } }, border: { display: false } } } };
+    return Object.assign(o, extra || {});
+  }
+  function compacto(v) { var a = Math.abs(v); if (a >= 1e6) return fmtD.format(v / 1e6) + ' M'; if (a >= 1e3) return fmtN.format(v / 1e3) + ' mil'; return fmtN.format(v); }
+
+  function dibujarEvol(ls) {
+    var d = V.porMes(ls);
+    var titulos = { venta: 'venta neta por mes', margen: 'margen por mes (solo renglones con costo)', unidades: 'unidades por mes', comprobantes: 'comprobantes por mes' };
+    el('vSubEvol').textContent = '· ' + titulos[metrica];
+    var valores = d.map(function (x) { return x[metrica]; });
+    var esPlata = metrica === 'venta' || metrica === 'margen';
+    var colores = valores.map(function (v) { return v < 0 ? COL.rojo : COL.azul; });
+    var cfg = { type: 'bar', data: { labels: d.map(function (x) { return mesTxt(x.mes); }), datasets: [{ data: valores, backgroundColor: colores, borderRadius: 4, borderSkipped: false, maxBarThickness: 28 }] },
+      options: opcionesBase({ onClick: function (e, act) {
+          if (!act.length) return; var k = d[act[0].index].mes; var fin = new Date(+k.slice(0, 4), +k.slice(5, 7), 0);
+          F.desde = k + '-01'; F.hasta = k + '-' + String(fin.getDate()).padStart(2, '0'); el('vfDesde').value = F.desde; el('vfHasta').value = F.hasta; el('vfPeriodo').value = 'custom'; pagina = 0; dibujar(); },
+        onHover: function (e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; } }) };
+    cfg.options.plugins.tooltip.callbacks = { label: function (c) { return esPlata ? g$(c.raw) : fmtD.format(c.raw); } };
+    cfg.options.scales.y.ticks.callback = function (v) { return compacto(v); };
+    if (graf.evol) graf.evol.destroy();
+    graf.evol = new Chart(el('vChEvol'), cfg);
+  }
+
+  function dibujarRank(ls) {
+    var d = V.ranking(ls, dimRank, 10);
+    var cfg = { type: 'bar', data: { labels: d.map(function (x) { return x.nombre.length > 28 ? x.nombre.slice(0, 27) + '…' : x.nombre; }),
+        datasets: [{ data: d.map(function (x) { return x.venta; }), backgroundColor: d.map(function (x) { return x.clave === null ? 'rgba(124,147,163,.5)' : (x.venta < 0 ? COL.rojo : COL.aqua); }), borderRadius: 4, borderSkipped: false, maxBarThickness: 22 }] },
+      options: opcionesBase({ indexAxis: 'y', onClick: function (e, act) {
+          if (!act.length) return; var x = d[act[0].index]; if (x.clave === null) return;
+          ponerFiltro(dimRank === 'provincia' ? 'provincia' : dimRank, x.clave); },
+        onHover: function (e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; } }) };
+    cfg.options.scales.x = { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } };
+    cfg.options.scales.y = { grid: { display: false }, ticks: { color: COL.claro, font: { size: 11.5 } }, border: { color: 'rgba(255,255,255,.12)' } };
+    cfg.options.plugins.tooltip.callbacks = { title: function (c) { return d[c[0].dataIndex].nombre; }, label: function (c) { return g$(c.raw); } };
+    if (graf.rank) graf.rank.destroy();
+    graf.rank = new Chart(el('vChRank'), cfg);
+  }
+
+  function dibujarTipo(ls) {
+    var tb = el('vTablaTipo'); tb.innerHTML = '';
+    V.porTipo(ls).forEach(function (t) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar';
+      tr.appendChild(nuevo('td', null, t.tipo)); tr.appendChild(nuevo('td', 'num', fmtN.format(t.comprobantes)));
+      tr.appendChild(nuevo('td', 'num', fmtN.format(t.renglones))); tr.appendChild(nuevo('td', 'num' + (t.importe < 0 ? ' neg' : ''), g$(t.importe)));
+      tr.appendChild(nuevo('td', 'num', t.pct == null ? '—' : fmtD.format(t.pct) + ' %'));
+      tr.addEventListener('click', function () { ponerFiltro('tipo', t.tipo); });
+      tb.appendChild(tr);
+    });
+    if (!tb.children.length) { var tr0 = nuevo('tr'); var td = nuevo('td', 'gris', 'Sin datos para estos filtros.'); td.colSpan = 5; tr0.appendChild(td); tb.appendChild(tr0); }
+  }
+
+  function dibujarMargen(ls) {
+    var k = V.kpis(ls), c = el('vMargenDet'); c.innerHTML = '';
+    var filas = [['Venta con costo válido', g$(k.venta_con_costo)], ['Costo de esa venta', g$(k.costo)], ['Margen', g$(k.margen)],
+      ['Margen sobre la venta con costo', k.margen_pct == null ? '—' : fmtD.format(k.margen_pct) + ' %'],
+      ['Venta sin costo (no entra en el margen)', g$(Math.round((k.venta - k.venta_con_costo) * 100) / 100)]];
+    var t = nuevo('table'); var tb = nuevo('tbody');
+    filas.forEach(function (f) { var tr = nuevo('tr'); tr.appendChild(nuevo('td', null, f[0])); tr.appendChild(nuevo('td', 'num', f[1])); tb.appendChild(tr); });
+    t.appendChild(tb); c.appendChild(t);
+    if (k.cobertura_pct != null && k.cobertura_pct < 80)
+      c.appendChild(nuevo('div', 'aviso-costo', '⚠ Solo el ' + fmtD.format(k.cobertura_pct) + ' % de la venta tiene un costo válido a la fecha de venta. El margen describe esa parte, no toda la venta.'));
+  }
+
+  var COLS = [['fecha', 'Fecha'], ['comprobante', 'Comprobante'], ['cliente', 'Cliente'], ['vendedor', 'Vendedor'], ['provincia', 'Provincia'], ['articulo', 'Artículo'],
+    ['cantidad', 'Cant.', 1], ['venta', 'Venta', 1], ['costo', 'Costo', 1], ['margen', 'Margen', 1], ['mpct', 'Margen %', 1]];
+
+  function dibujarDetalle(ls) {
+    var cab = el('vCabDet'); cab.innerHTML = '';
+    COLS.forEach(function (c) {
+      var th = nuevo('th', 'ord' + (c[2] ? ' num' : ''), c[1] + (orden.col === c[0] ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''));
+      th.addEventListener('click', function () { if (orden.col === c[0]) orden.dir = -orden.dir; else { orden.col = c[0]; orden.dir = c[2] ? -1 : 1; } dibujarDetalle(V.filtrar(DATOS, F)); });
+      cab.appendChild(th);
+    });
+    var filas = ls.map(function (l) { var o = Object.assign({}, l); o.comprobante = l.tipo_comprobante + ' ' + l.n_comp; o.mpct = l.tiene_costo && +l.venta ? 100 * l.margen / l.venta : null; return o; });
+    filas.sort(function (a, b) {
+      var x = a[orden.col], y = b[orden.col];
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      return (typeof x === 'number' || !isNaN(+x) && orden.col !== 'fecha' && orden.col !== 'comprobante' ? (+x - +y) : String(x).localeCompare(String(y))) * orden.dir;
+    });
+    var paginas = Math.max(1, Math.ceil(filas.length / POR_PAG)); if (pagina >= paginas) pagina = paginas - 1;
+    var tb = el('vTablaDet'); tb.innerHTML = '';
+    filas.slice(pagina * POR_PAG, (pagina + 1) * POR_PAG).forEach(function (l) {
+      var tr = nuevo('tr');
+      tr.appendChild(nuevo('td', null, fechaTxt(l.fecha)));
+      tr.appendChild(nuevo('td', null, l.comprobante));
+      var tdc = nuevo('td', 'clic', l.cliente); tdc.title = 'Filtrar este cliente'; tdc.addEventListener('click', function () { ponerFiltro('cliente', l.cod_client); }); tr.appendChild(tdc);
+      tr.appendChild(nuevo('td', null, l.vendedor)); tr.appendChild(nuevo('td', null, l.provincia));
+      var tda = nuevo('td', 'clic', l.articulo); tda.title = 'Filtrar este artículo'; tda.addEventListener('click', function () { ponerFiltro('articulo', l.cod_articu); }); tr.appendChild(tda);
+      tr.appendChild(nuevo('td', 'num', fmtD.format(l.cantidad)));
+      tr.appendChild(nuevo('td', 'num' + (+l.venta < 0 ? ' neg' : ''), g$(+l.venta)));
+      tr.appendChild(nuevo('td', 'num', l.tiene_costo ? g$(+l.costo) : 'sin costo'));
+      tr.appendChild(nuevo('td', 'num' + (+l.margen < 0 ? ' neg' : ''), l.tiene_costo ? g$(+l.margen) : '—'));
+      tr.appendChild(nuevo('td', 'num', l.mpct == null ? '—' : fmtD.format(l.mpct) + ' %'));
+      tb.appendChild(tr);
+    });
+    if (!filas.length) { var tr0 = nuevo('tr'); var td = nuevo('td', 'gris', 'Sin renglones para estos filtros.'); td.colSpan = COLS.length; tr0.appendChild(td); tb.appendChild(tr0); }
+    el('vPagInfo').textContent = filas.length ? 'Mostrando ' + (pagina * POR_PAG + 1) + '–' + Math.min(filas.length, (pagina + 1) * POR_PAG) + ' de ' + fmtN.format(filas.length) + ' · página ' + (pagina + 1) + ' de ' + paginas : '';
+    el('vPagAnt').disabled = pagina === 0; el('vPagSig').disabled = pagina >= paginas - 1;
+  }
+
+  function descargarCsv() {
+    var ls = V.filtrar(DATOS, F);
+    var cab = ['fecha', 'tipo_comprobante', 'n_comp', 'cod_client', 'cliente', 'vendedor', 'provincia', 'cod_articu', 'articulo', 'cantidad', 'venta', 'costo', 'margen', 'origen_costo'];
+    var esc = function (v) { v = v == null ? '' : String(v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var txt = cab.join(';') + '\n' + ls.map(function (l) { return cab.map(function (c) { return esc(l[c]); }).join(';'); }).join('\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + txt], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'ventas_empresa_ejemplo.csv'; document.body.appendChild(a); a.click(); a.remove();
+  }
+})();
+</script>

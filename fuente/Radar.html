@@ -1,0 +1,581 @@
+<!-- ============ RADAR (tablero central) ============ -->
+<!-- Junta lo más importante de todos los módulos. Ventas y Compras con su propia lógica (VentasLogica, ComprasLogica); el resto desde api_radar_hoy_v2 y api_radar_mensual_v2,
+     así las cifras son las mismas que en cada pantalla. Usa los estilos comunes que define el módulo Ventas. -->
+<style>
+  .r-cab { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; justify-content:space-between; margin-bottom:10px; }
+  .r-cab .sub { font-size:12.5px; color:var(--gray); }
+  .r-periodo { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+  .r-periodo .filtro { min-width:150px; }
+  .r-compara { font-size:12px; color:var(--gray); margin:0 0 14px; }
+  .kpis.r8 { grid-template-columns:repeat(4,1fr); }
+  @media (max-width: 900px) { .kpis.r8 { grid-template-columns:repeat(2,1fr); } }
+  .kpi.clic { cursor:pointer; transition:border-color .15s; }
+  .kpi.clic:hover { border-color:rgba(8,165,122,.5); }
+  .r-delta { display:inline-block; font-size:11.5px; font-weight:600; margin-top:5px; padding:1px 7px; border-radius:10px; background:rgba(255,255,255,.06); color:var(--gray); }
+  .r-delta.sube { color:#4fd1a5; background:rgba(8,165,122,.12); }
+  .r-delta.baja { color:#ff8b8f; background:rgba(229,72,77,.12); }
+  .r-senales { max-height:392px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding-right:4px; }
+  .senal { border:1px solid var(--border); border-left:4px solid var(--gray); border-radius:8px; padding:10px 12px; background:rgba(255,255,255,.02); }
+  .senal.alta { border-left-color:#e66767; } .senal.media { border-left-color:var(--amber); } .senal.info { border-left-color:#3987e5; }
+  .senal .t { font-size:13px; font-weight:600; display:flex; justify-content:space-between; gap:8px; align-items:flex-start; }
+  .senal .d { font-size:12px; color:var(--gray); margin-top:4px; line-height:1.45; }
+  .senal .nivel { font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--gray); white-space:nowrap; }
+  .senal button { margin-top:6px; }
+  .grilla-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media (max-width: 1100px) { .grilla-3 { grid-template-columns:1fr; } }
+  .r-modulos { display:flex; flex-wrap:wrap; gap:8px; }
+  .r-mod { font-size:12px; padding:4px 10px; border-radius:20px; border:1px solid var(--border); color:var(--gray); }
+  .r-mod.ok { color:var(--green-hover); border-color:rgba(8,165,122,.35); background:rgba(8,165,122,.1); }
+  .r-mod.mal { color:#ff8b8f; border-color:rgba(229,72,77,.35); }
+  .kpis.sin-margen { margin-bottom:0; }
+  table.r-er td.nota { font-size:11.5px; color:var(--gray); padding-top:0; border-top:none; }
+  table.r-er tr.r-total td { font-weight:700; border-top:2px solid var(--border); font-size:14px; }
+  table.r-er tr.r-sep td { padding-top:14px; }
+  table.r-er .falta { color:var(--amber); font-size:11px; margin-left:6px; }
+</style>
+
+<div id="radar">
+  <div class="r-cab">
+    <div class="sub">Lo más importante de todos los módulos, en una sola pantalla. Clic en cualquier número, barra o fila: abre el módulo (Ventas y Compras, ya filtrados).</div>
+    <div class="r-periodo">
+      <div class="filtro"><label for="rPeriodo">Período</label><select id="rPeriodo"></select></div>
+      <div class="filtro"><label for="rDesde">Desde</label><input type="date" id="rDesde"></div>
+      <div class="filtro"><label for="rHasta">Hasta</label><input type="date" id="rHasta"></div>
+    </div>
+  </div>
+  <div class="r-compara" id="rCompara"></div>
+  <div id="rMensaje" class="mensaje oculto"></div>
+  <div id="rCuerpo">
+    <div class="kpis r8" id="rKpis"></div>
+
+    <div class="panel">
+      <h3><span>Foto de hoy <span class="sub">saldos y situación a la fecha, de todos los módulos</span></span></h3>
+      <div class="kpis r8 sin-margen" id="rHoy"></div>
+      <div id="rHoyMsg" class="mensaje oculto"></div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Estado de resultados <span class="sub">por comprobantes, del período elegido</span></span></h3>
+        <div class="tabla-scroll"><table class="r-er"><thead><tr><th>Concepto</th><th class="num">Período</th><th class="num" id="rErAnt">Anterior</th></tr></thead><tbody id="rER"></tbody></table></div>
+        <div id="rErAviso" class="mensaje oculto"></div>
+        <div class="pie-dato">Ventas y compras con fecha exacta, igual que en sus módulos. Sueldos, amortizaciones e IVA por mes completo: entran los meses cuyo día 1 cae dentro del período. No es un balance contable: no incluye variación de stock, impuestos ni otros gastos que no pasan por estos módulos.</div>
+      </div>
+      <div class="panel">
+        <h3><span>Resultado por mes <span class="sub">ventas − compras − sueldos − amortizaciones</span></span></h3>
+        <div class="lienzo alto"><canvas id="rChRes" aria-label="Resultado por mes"></canvas></div>
+        <div class="ayuda">Barra verde: el mes dio positivo; roja: negativo. Los meses sin sueldos cargados salen mejor de lo real. Clic en un mes: abre Ventas filtrada en ese mes.</div>
+      </div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Ventas y compras por mes <span class="sub">ventas netas y compras sin IVA</span></span></h3>
+        <div class="lienzo alto"><canvas id="rChMes" aria-label="Ventas y compras por mes"></canvas></div>
+        <div class="ayuda">Clic en un mes: abre Ventas filtrada en ese mes.</div>
+      </div>
+      <div class="panel">
+        <h3><span>Señales del radar <span class="sub" id="rSubSen"></span></span></h3>
+        <div class="r-senales" id="rSenales"></div>
+      </div>
+    </div>
+
+    <div class="grilla-3">
+      <div class="panel"><h3><span>Clientes <span class="sub">top 5 del período</span></span></h3>
+        <div class="tabla-scroll"><table><thead><tr><th>Cliente</th><th class="num">Venta</th><th class="num">vs. anterior</th></tr></thead><tbody id="rTopCli"></tbody></table></div></div>
+      <div class="panel"><h3><span>Artículos vendidos <span class="sub">top 5</span></span></h3>
+        <div class="tabla-scroll"><table><thead><tr><th>Artículo</th><th class="num">Venta</th><th class="num">Margen</th></tr></thead><tbody id="rTopArt"></tbody></table></div></div>
+      <div class="panel"><h3><span>Proveedores <span class="sub">top 5</span></span></h3>
+        <div class="tabla-scroll"><table><thead><tr><th>Proveedor</th><th class="num">Compras</th><th class="num">Part.</th></tr></thead><tbody id="rTopPro"></tbody></table></div></div>
+    </div>
+
+    <div class="panel">
+      <h3>Qué alimenta el radar</h3>
+      <div class="r-modulos" id="rModulos"></div>
+      <div class="pie-dato">Cada módulo se suma al radar recién cuando pasó sus pruebas contra los datos reales. Ninguna cifra se muestra sin prueba.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Lógica pura. Usa VentasLogica y ComprasLogica para que las cifras sean las mismas que en cada pantalla.
+  // ---------------------------------------------------------------------------
+  var R = window.RadarLogica = {};
+  function r2(x) { return Math.round(x * 100) / 100; }
+  function d2s(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function s2d(s) { return new Date(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)); }
+  function masDias(s, n) { var d = s2d(s); d.setDate(d.getDate() + n); return d2s(d); }
+  function menosMeses(s, n) {   // misma fecha n meses antes (si el día no existe, último día del mes)
+    var d = s2d(s), dia = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() - n);
+    var ult = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); d.setDate(Math.min(dia, ult)); return d2s(d);
+  }
+  R.masDias = masDias; R.menosMeses = menosMeses;
+  R.delta = function (a, b) { return b ? Math.round(1000 * (a - b) / Math.abs(b)) / 10 : null; };
+
+  // Período elegido y el período anterior de igual duración con el que se compara.
+  R.periodo = function (clave, corte, min, max, desde, hasta) {
+    var p = { clave: clave }, meses = null;
+    if (clave === '12m' || clave === '6m' || clave === '3m') { meses = +clave.slice(0, -1); p.hasta = corte; p.desde = masDias(menosMeses(corte, meses), 1); }
+    else if (clave.charAt(0) === 'a') { meses = 12; p.desde = clave.slice(1) + '-01-01'; p.hasta = clave.slice(1) + '-12-31'; }
+    else if (clave === 'corte') { p.desde = min; p.hasta = corte; }
+    else if (clave === 'todo') { p.desde = min; p.hasta = max; }
+    else { p.desde = desde || min; p.hasta = hasta || max; }
+    if (clave === 'corte' || clave === 'todo') { p.antDesde = null; p.antHasta = null; }
+    else if (meses) { p.antHasta = masDias(p.desde, -1); p.antDesde = clave.charAt(0) === 'a' ? (+clave.slice(1) - 1) + '-01-01' : masDias(menosMeses(p.antHasta, meses), 1); }
+    else { var dias = Math.round((s2d(p.hasta) - s2d(p.desde)) / 864e5) + 1; p.antHasta = masDias(p.desde, -1); p.antDesde = masDias(p.antHasta, -(dias - 1)); }
+    return p;
+  };
+
+  R.calcular = function (ventas, comps, lins, p, corte, mensual, hoy) {
+    var V = window.VentasLogica, C = window.ComprasLogica;
+    var va = V.filtrar(ventas, { desde: p.desde, hasta: p.hasta }), vp = p.antDesde ? V.filtrar(ventas, { desde: p.antDesde, hasta: p.antHasta }) : [];
+    var ca = C.filtrar(comps, lins, { desde: p.desde, hasta: p.hasta }), cp = p.antDesde ? C.filtrar(comps, lins, { desde: p.antDesde, hasta: p.antHasta }) : { comps: [], lineas: [] };
+    var kv = V.kpis(va), kvp = V.kpis(vp), kc = C.kpis(ca.comps), kcp = C.kpis(cp.comps), kTodo = C.kpis(comps);
+    var compras = r2(kc.neto + kc.exento), comprasAnt = r2(kcp.neto + kcp.exento);
+    var hayAnt = !!p.antDesde;
+    var x = {
+      va: va, vp: vp, ca: ca, cp: cp, kv: kv, kvp: kvp, kc: kc, kcp: kcp, hayAnt: hayAnt,
+      ventas: kv.venta, ventasAnt: hayAnt ? kvp.venta : null, dVentas: hayAnt ? R.delta(kv.venta, kvp.venta) : null,
+      margen_pct: kv.margen_pct, margen_pct_ant: hayAnt ? kvp.margen_pct : null, cobertura: kv.cobertura_pct,
+      compras: compras, comprasAnt: hayAnt ? comprasAnt : null, dCompras: hayAnt ? R.delta(compras, comprasAnt) : null,
+      ratio: kv.venta ? Math.round(1000 * compras / kv.venta) / 10 : null,
+      ratioAnt: hayAnt && kvp.venta ? Math.round(1000 * comprasAnt / kvp.venta) / 10 : null,
+      clientes: kv.clientes, clientesAnt: hayAnt ? kvp.clientes : null,
+      proveedores: kc.proveedores, proveedoresAnt: hayAnt ? kcp.proveedores : null,
+      ticket: kv.ticket, ticketAnt: hayAnt ? kvp.ticket : null, dTicket: hayAnt ? R.delta(kv.ticket, kvp.ticket) : null,
+      pendiente: kTodo.pendiente, n_pendiente: kTodo.n_pendiente
+    };
+    x.meses = R.porMes(va, ca.comps, p.desde, p.hasta);
+    x.senales = R.senales(x, ventas, comps, p, corte);
+    x.topClientes = R.topClientes(va, vp, 5);
+    x.topArticulos = R.topArticulos(va, 5);
+    x.topProveedores = C.ranking(ca.comps, ca.lineas, 'proveedor', 1000).slice(0, 5).map(function (r) { return { clave: r.clave, nombre: r.nombre, valor: r.valor, pct: kc.total ? Math.round(1000 * r.valor / kc.total) / 10 : null }; });
+    x.hoy = hoy || null; x.res = null;
+    if (hoy) {
+      x.res = R.resultados(x, p, mensual, hoy);
+      var orden = { alta: 0, media: 1, info: 2 };
+      x.senales = x.senales.concat(R.senalesModulos(hoy, mensual, corte, x.res)).sort(function (a, b) { return orden[a.nivel] - orden[b.nivel]; });
+    }
+    return x;
+  };
+
+  // Un renglón por mes del período (también los meses sin movimiento), ventas netas y compras sin IVA.
+  R.porMes = function (va, comps, desde, hasta) {
+    var m = {}, k = desde.slice(0, 7), fin = hasta.slice(0, 7), n = 0;
+    while (k <= fin && n < 600) { m[k] = { mes: k, ventas: 0, compras: 0 }; var d = s2d(k + '-01'); d.setMonth(d.getMonth() + 1); k = d2s(d).slice(0, 7); n++; }
+    va.forEach(function (l) { var q = l.fecha.slice(0, 7); if (m[q]) m[q].ventas += +l.venta; });
+    comps.forEach(function (c) { var q = c.fecha.slice(0, 7); if (m[q]) m[q].compras += (+c.neto) + (+c.exento); });
+    return Object.keys(m).sort().map(function (q) { return { mes: q, ventas: r2(m[q].ventas), compras: r2(m[q].compras) }; });
+  };
+
+  R.topClientes = function (va, vp, n) {
+    var ant = {}; vp.forEach(function (l) { ant[l.cod_client] = (ant[l.cod_client] || 0) + (+l.venta); });
+    return window.VentasLogica.ranking(va, 'cliente', 100000).slice(0, n).map(function (r) {
+      return { clave: r.clave, nombre: r.nombre, venta: r.venta, anterior: ant[r.clave] != null ? r2(ant[r.clave]) : 0, delta: ant[r.clave] ? R.delta(r.venta, ant[r.clave]) : null };
+    });
+  };
+
+  R.topArticulos = function (va, n) {
+    var g = {};
+    va.forEach(function (l) {
+      var k = l.cod_articu; if (!g[k]) g[k] = { clave: k, nombre: l.articulo, venta: 0, vc: 0, margen: 0 };
+      g[k].venta += +l.venta; if (l.tiene_costo) { g[k].vc += +l.venta; g[k].margen += +l.margen; }
+    });
+    return Object.keys(g).map(function (k) { var x = g[k]; return { clave: k, nombre: x.nombre, venta: r2(x.venta), margen_pct: x.vc ? Math.round(1000 * x.margen / x.vc) / 10 : null }; })
+      .sort(function (a, b) { return b.venta - a.venta; }).slice(0, n);
+  };
+
+  R.UMBRAL = { variacion: 20, concentracion: 30, cobertura: 80, notasCredito: 10, subaPrecio: 50 };
+
+  R.senales = function (x, ventas, comps, p, corte) {
+    var V = window.VentasLogica, C = window.ComprasLogica, U = R.UMBRAL, s = [];
+    var f$ = function (v) { return R.plata(v); }, per = { desde: p.desde, hasta: p.hasta };
+    function add(nivel, titulo, detalle, accion, dato) { s.push({ nivel: nivel, titulo: titulo, detalle: detalle, accion: accion || null, dato: dato }); }
+
+    if (x.kv.renglones && !x.kc.comprobantes)
+      add('alta', 'No hay compras cargadas en el período', 'Las ventas del período no tienen compras con qué compararse: el índice compras / ventas no se puede calcular.', { modulo: 'Compras', f: {} }, { clave: 'sin_compras' });
+    if (x.hayAnt && x.dVentas != null && Math.abs(x.dVentas) >= U.variacion)
+      add(x.dVentas < 0 ? 'alta' : 'info', 'Las ventas ' + (x.dVentas < 0 ? 'cayeron ' : 'subieron ') + R.num(Math.abs(x.dVentas)) + ' % contra el período anterior',
+        f$(x.ventas) + ' en el período contra ' + f$(x.ventasAnt) + ' en el anterior.', { modulo: 'Ventas', f: per }, { clave: 'variacion', valor: x.dVentas });
+    if (x.kv.venta > 0) {
+      var top = V.ranking(x.va, 'cliente', 1)[0];
+      if (top && top.clave !== null) { var sh = Math.round(1000 * top.venta / x.kv.venta) / 10;
+        if (sh >= U.concentracion) add('media', top.nombre + ' concentra el ' + R.num(sh) + ' % de la venta', 'Depender tanto de un cliente es un riesgo: ' + f$(top.venta) + ' de ' + f$(x.kv.venta) + '.', { modulo: 'Ventas', f: { desde: p.desde, hasta: p.hasta, cliente: top.clave } }, { clave: 'conc_cliente', valor: sh, cod: top.clave }); }
+    }
+    if (x.kc.total > 0) {
+      var tp = C.ranking(x.ca.comps, x.ca.lineas, 'proveedor', 1)[0];
+      if (tp && tp.clave !== null) { var shp = Math.round(1000 * tp.valor / x.kc.total) / 10;
+        if (shp >= U.concentracion) add('media', tp.nombre + ' concentra el ' + R.num(shp) + ' % de las compras', f$(tp.valor) + ' de ' + f$(x.kc.total) + ' (con impuestos).', { modulo: 'Compras', f: { desde: p.desde, hasta: p.hasta, proveedor: tp.clave } }, { clave: 'conc_proveedor', valor: shp, cod: tp.clave }); }
+    }
+    if (x.cobertura != null && x.cobertura < U.cobertura)
+      add('media', 'Solo el ' + R.num(x.cobertura) + ' % de la venta tiene costo válido', 'El margen de ' + (x.margen_pct == null ? '—' : R.num(x.margen_pct) + ' %') + ' describe esa parte, no toda la venta. Falta costo en Tango para el resto.', { modulo: 'Ventas', f: { desde: p.desde, hasta: p.hasta, costo: 'sin' } }, { clave: 'cobertura', valor: x.cobertura });
+    var neg = x.va.filter(function (l) { return l.tiene_costo && +l.margen < 0; });
+    if (neg.length) {
+      var peor = neg.slice().sort(function (a, b) { return a.margen - b.margen; })[0];
+      add('media', neg.length + ' renglones vendidos con margen negativo', 'Pérdida total ' + f$(neg.reduce(function (t, l) { return t + (+l.margen); }, 0)) + '. El peor: ' + peor.articulo + ' (' + f$(+peor.margen) + ').', { modulo: 'Ventas', f: { desde: p.desde, hasta: p.hasta, articulo: peor.cod_articu } }, { clave: 'margen_negativo', valor: neg.length, suma: r2(neg.reduce(function (t, l) { return t + (+l.margen); }, 0)) });
+    }
+    if (x.hayAnt) {
+      var act = {}, ant = {};
+      x.va.forEach(function (l) { act[l.cod_client] = 1; });
+      x.vp.forEach(function (l) { if (!ant[l.cod_client]) ant[l.cod_client] = { cod: l.cod_client, nombre: l.cliente, venta: 0 }; ant[l.cod_client].venta += +l.venta; });
+      var perdidos = Object.keys(ant).filter(function (k) { return !act[k] && ant[k].venta > 0; }).map(function (k) { return ant[k]; }).sort(function (a, b) { return b.venta - a.venta; });
+      if (perdidos.length) add('media', perdidos.length + ' clientes compraron en el período anterior y en este no',
+        'Los principales: ' + perdidos.slice(0, 3).map(function (c) { return c.nombre + ' (' + f$(r2(c.venta)) + ')'; }).join(', ') + '.',
+        { modulo: 'Ventas', f: { desde: p.antDesde, hasta: p.antHasta, cliente: perdidos[0].cod } }, { clave: 'perdidos', valor: perdidos.length });
+    }
+    var vars = C.variaciones(x.ca.lineas).filter(function (v) { return v.compras > 1 && v.variacion_pct != null; });
+    var raros = vars.filter(function (v) { return Math.abs(v.variacion_pct) >= C.SALTO_RARO; });
+    var subas = vars.filter(function (v) { return v.variacion_pct >= U.subaPrecio && Math.abs(v.variacion_pct) < C.SALTO_RARO; });
+    if (raros.length) add('media', raros.length + ' artículos con saltos de precio de compra de más de ' + R.num(C.SALTO_RARO) + ' %', 'Por ejemplo ' + raros[0].articulo + ': de ' + R.plata2(raros[0].primero) + ' a ' + R.plata2(raros[0].ultimo) + '. Es lo que tiene Tango; conviene revisar moneda, unidad o carga.', { modulo: 'Compras', f: { articulo: raros[0].cod_articu } }, { clave: 'saltos_precio', valor: raros.length });
+    if (subas.length) add('info', subas.length + ' artículos subieron más de ' + R.num(U.subaPrecio) + ' % su precio de compra en el período', 'El mayor: ' + subas[0].articulo + ' (' + (subas[0].variacion_pct > 0 ? '+' : '') + R.num(subas[0].variacion_pct) + ' %).', { modulo: 'Compras', f: { desde: p.desde, hasta: p.hasta, articulo: subas[0].cod_articu } }, { clave: 'subas_precio', valor: subas.length });
+    var fac = 0, nc = 0, tipoNc = null;
+    x.va.forEach(function (l) { if (+l.venta > 0) fac += +l.venta; else if (+l.venta < 0 && l.signo < 0) { nc += -l.venta; tipoNc = tipoNc || l.tipo_comprobante; } });
+    if (fac && nc / fac * 100 >= U.notasCredito) add('media', 'Las notas de crédito son el ' + R.num(Math.round(1000 * nc / fac) / 10) + ' % de lo facturado', f$(r2(nc)) + ' devueltos o bonificados sobre ' + f$(r2(fac)) + ' facturados.', { modulo: 'Ventas', f: { desde: p.desde, hasta: p.hasta, tipo: tipoNc } }, { clave: 'notas_credito', valor: Math.round(1000 * nc / fac) / 10 });
+    if (x.pendiente) add('info', 'Compras pendientes de pago: ' + f$(x.pendiente), x.n_pendiente + ' comprobantes en estado PEN (de todos los períodos, a hoy). Tango no tiene vencimientos cargados, así que no se sabe cuánto está vencido.', { modulo: 'Compras', f: { estado: 'PEN' } }, { clave: 'pendiente', valor: x.pendiente });
+    var post = ventas.filter(function (l) { return l.fecha > corte; });
+    if (post.length) add('info', post.length + ' renglones de venta posteriores al corte (' + R.fecha(corte) + ')', f$(r2(post.reduce(function (t, l) { return t + (+l.venta); }, 0))) + ' entre ' + R.fecha(post[0].fecha) + ' y ' + R.fecha(post[post.length - 1].fecha) + '. En esas fechas no hay compras cargadas, por eso el período por defecto termina en el corte.', { modulo: 'Ventas', f: { desde: masDias(corte, 1) } }, { clave: 'post_corte', valor: post.length });
+    var orden = { alta: 0, media: 1, info: 2 };
+    return s.sort(function (a, b) { return orden[a.nivel] - orden[b.nivel]; });
+  };
+
+  // ---------------------------------------------------------------------------
+  // Resto de los módulos (Tesorería, Stock, Legajos, Activo Fijo, IVA): vienen resumidos de la base
+  // (api_radar_hoy_v2 = foto de hoy, api_radar_mensual_v2 = mes a mes), probados contra cada módulo.
+  // ---------------------------------------------------------------------------
+  R.mesesEntre = function (desde, hasta) {
+    var r = [], k = desde.slice(0, 7), fin = hasta.slice(0, 7), n = 0;
+    while (k <= fin && n < 600) { r.push(k); var d = s2d(k + '-01'); d.setMonth(d.getMonth() + 1); k = d2s(d).slice(0, 7); n++; }
+    return r;
+  };
+  R.indiceMensual = function (mensual) { var m = {}; (mensual || []).forEach(function (x) { m[String(x.mes).slice(0, 7)] = x; }); return m; };
+  function num(v) { return v == null ? null : +v; }
+
+  // Meses que entran en el período para lo que es mensual (sueldos, amortizaciones, IVA): los que tienen su día 1 dentro del período.
+  // Así "últimos 12 meses" son siempre 12 meses de sueldos, aunque el período empiece a mitad de mes.
+  R.mesesDelPeriodo = function (desde, hasta) { return R.mesesEntre(desde, hasta).filter(function (k) { return k + '-01' >= desde && k + '-01' <= hasta; }); };
+
+  // Estado de resultados por comprobantes. Ventas netas y compras sin IVA con fecha exacta (las mismas cifras que Ventas y Compras);
+  // costo laboral, amortizaciones e IVA por mes completo (así se liquidan, se amortizan y se declaran).
+  R.estado = function (ventas, compras, meses, idx, hoy) {
+    var puede = !!(hoy && hoy.puede_ver_sueldos);
+    var e = { ventas: r2(ventas), compras: r2(compras), meses: meses.length, costo: puede ? 0 : null, amort: 0, iva_debito: 0, iva_credito: 0,
+              m_costo: 0, m_amort: 0, sin_costo: [] };
+    meses.forEach(function (k) {
+      var x = idx[k] || {};
+      if (puede) { if (x.costo_laboral != null) { e.costo += +x.costo_laboral; e.m_costo++; } else e.sin_costo.push(k); }
+      if (x.amortizacion != null) { e.amort += +x.amortizacion; e.m_amort++; }
+      e.iva_debito += num(x.iva_debito) || 0; e.iva_credito += num(x.iva_credito) || 0;
+    });
+    ['amort', 'iva_debito', 'iva_credito'].forEach(function (q) { e[q] = r2(e[q]); });
+    if (e.costo != null) e.costo = r2(e.costo);
+    e.resultado = r2(e.ventas - e.compras - (e.costo || 0) - e.amort);
+    e.iva_saldo = r2(e.iva_debito - e.iva_credito);
+    return e;
+  };
+
+  // Líneas del estado (período y anterior) con su aviso de cobertura, y el resultado mes a mes para el gráfico.
+  R.resultados = function (x, p, mensual, hoy) {
+    var idx = R.indiceMensual(mensual), puede = !!(hoy && hoy.puede_ver_sueldos);
+    var mp = R.mesesDelPeriodo(p.desde, p.hasta), e = R.estado(x.ventas, x.compras, mp, idx, hoy);
+    var a = p.antDesde ? R.estado(x.ventasAnt, x.comprasAnt, R.mesesDelPeriodo(p.antDesde, p.antHasta), idx, hoy) : null;
+    var mv = x.meses.filter(function (q) { return q.ventas; }).length, mc = x.meses.filter(function (q) { return q.compras; }).length;
+    var ultS = hoy && hoy.ultimo_mes_sueldos ? String(hoy.ultimo_mes_sueldos).slice(0, 7) : null;
+    var ultA = hoy && hoy.af_ultima_amortizacion ? String(hoy.af_ultima_amortizacion).slice(0, 10) : null;
+    var lineas = [
+      { clave: 'ventas', concepto: 'Ventas netas', signo: 1, valor: e.ventas, ant: a ? a.ventas : null, modulo: 'Ventas',
+        nota: 'sin impuestos, notas de crédito restadas · ' + mv + ' de ' + x.meses.length + ' meses con ventas', incompleto: false },
+      { clave: 'compras', concepto: 'Compras sin IVA', signo: -1, valor: e.compras, ant: a ? a.compras : null, modulo: 'Compras',
+        nota: 'neto gravado + exento · ' + mc + ' de ' + x.meses.length + ' meses con compras', incompleto: mc < mv },
+      { clave: 'costo', concepto: 'Costo laboral', signo: -1, valor: e.costo, ant: a ? a.costo : null, modulo: 'Legajos',
+        nota: !puede ? 'tu usuario no tiene permiso para ver sueldos: no se resta' : (e.m_costo + ' de ' + e.meses + ' meses con sueldos' + (ultS ? ' · cargados hasta ' + mesLargo(ultS) : '')),
+        incompleto: !puede || e.sin_costo.length > 0 },
+      { clave: 'amort', concepto: 'Amortizaciones', signo: -1, valor: e.amort, ant: a ? a.amort : null, modulo: 'ActivoFijo',
+        nota: ultA ? 'calculadas hasta ' + R.fecha(ultA) : 'sin amortizaciones calculadas', incompleto: mp.length > 0 && (!ultA || ultA.slice(0, 7) < mp[mp.length - 1]) }   // se amortiza por mes: alcanza con que esté el último mes del período
+    ];
+    return { lineas: lineas, meses: mp, resultado: e.resultado, resultadoAnt: a ? a.resultado : null, dResultado: a ? R.delta(e.resultado, a.resultado) : null,
+             faltan: lineas.filter(function (l) { return l.incompleto; }).map(function (l) { return l.concepto.charAt(0).toLowerCase() + l.concepto.slice(1); }),
+             iva: { debito: e.iva_debito, credito: e.iva_credito, saldo: e.iva_saldo, ant: a ? a.iva_saldo : null },
+             porMes: x.meses.map(function (q) { var z = idx[q.mes] || {}, s = puede && z.costo_laboral != null ? +z.costo_laboral : 0, am = z.amortizacion != null ? +z.amortizacion : 0;
+               return { mes: q.mes, ventas: q.ventas, compras: q.compras, costo: puede ? num(z.costo_laboral) : null, amort: num(z.amortizacion), resultado: r2(q.ventas - q.compras - s - am) }; }) };
+  };
+  function mesLargo(k) { var n = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']; return n[+k.slice(5, 7) - 1] + ' ' + k.slice(0, 4); }
+  R.mesLargo = mesLargo;
+
+  // Meses sin sueldos entre el primer y el último mes con sueldos (huecos de carga), agrupados en tramos.
+  R.huecosSueldos = function (mensual) {
+    var con = (mensual || []).filter(function (x) { return x.costo_laboral != null; }).map(function (x) { return String(x.mes).slice(0, 7); }).sort();
+    if (con.length < 2) return [];
+    var hay = {}; con.forEach(function (k) { hay[k] = 1; });
+    var tramos = [], t = null;
+    R.mesesEntre(con[0] + '-01', con[con.length - 1] + '-01').forEach(function (k) {
+      if (!hay[k]) { if (!t) { t = { desde: k, hasta: k, meses: 0 }; tramos.push(t); } t.hasta = k; t.meses++; } else t = null;
+    });
+    return tramos;
+  };
+
+  // Señales de los otros módulos (no dependen del período elegido, salvo el IVA).
+  R.senalesModulos = function (hoy, mensual, corte, res) {
+    var s = []; if (!hoy) return s;
+    var f$ = function (v) { return R.plata(v); };
+    function add(nivel, titulo, detalle, modulo, dato) { s.push({ nivel: nivel, titulo: titulo, detalle: detalle, accion: modulo ? { modulo: modulo, f: {} } : null, dato: dato }); }
+    if (+hoy.disponibilidades < 0) add('alta', 'Las disponibilidades están en negativo: ' + f$(+hoy.disponibilidades), 'Saldo de cajas, bancos, valores y tarjetas a hoy.', 'Tesoreria', { clave: 'disp_negativa' });
+    if (+hoy.n_cheques_rechazados > 0) add('media', hoy.n_cheques_rechazados + ' cheques rechazados por ' + f$(+hoy.cheques_rechazados), 'Cheques de terceros en estado rechazado.', 'Tesoreria', { clave: 'cheques_rechazados', valor: +hoy.n_cheques_rechazados });
+    if (+hoy.cuentas_ficha_distinta > 0) add('info', hoy.cuentas_ficha_distinta + ' cuentas con saldo distinto al de su ficha en Tango', 'El saldo calculado con los movimientos no coincide con el que guarda la ficha de la cuenta. Conviene revisar en Tesorería.', 'Tesoreria', { clave: 'ficha_distinta', valor: +hoy.cuentas_ficha_distinta });
+    if (+hoy.stock_negativos > 0) add('media', hoy.stock_negativos + ' artículos con stock negativo', 'Salió más de lo que entró: falta cargar entradas o hay errores de carga.', 'Stock', { clave: 'stock_negativo', valor: +hoy.stock_negativos });
+    if (+hoy.stock_sin_costo > 0) add('media', hoy.stock_sin_costo + ' artículos con stock y sin costo', 'No suman al stock valorizado (' + f$(+hoy.stock_valorizado) + '). Falta el costo en Tango.', 'Stock', { clave: 'stock_sin_costo', valor: +hoy.stock_sin_costo });
+    if (+hoy.stock_bajo_minimo > 0) add('info', hoy.stock_bajo_minimo + ' artículos por debajo del stock mínimo', 'Stock actual menor al mínimo cargado en la ficha del artículo.', 'Stock', { clave: 'bajo_minimo', valor: +hoy.stock_bajo_minimo });
+    var ultS = hoy.ultimo_mes_sueldos ? String(hoy.ultimo_mes_sueldos).slice(0, 7) : null;
+    if (hoy.puede_ver_sueldos) {
+      if (ultS && corte && ultS < corte.slice(0, 7)) add('media', 'Sueldos cargados solo hasta ' + mesLargo(ultS), 'Después de esa fecha el estado de resultados no incluye costo laboral: el resultado de esos meses sale mejor de lo real.', 'Legajos', { clave: 'sueldos_hasta', valor: ultS });
+      var h = R.huecosSueldos(mensual);
+      if (h.length) { var tot = h.reduce(function (t, x) { return t + x.meses; }, 0);
+        add('media', 'Faltan sueldos de ' + tot + ' meses', 'No hay recibos en: ' + h.map(function (x) { return x.desde === x.hasta ? mesLargo(x.desde) : mesLargo(x.desde) + ' a ' + mesLargo(x.hasta); }).join(', ') + '. En esos meses el resultado no resta costo laboral.', 'Legajos', { clave: 'huecos_sueldos', valor: tot }); }
+    }
+    var ultA = hoy.af_ultima_amortizacion ? String(hoy.af_ultima_amortizacion).slice(0, 10) : null;
+    if (ultA && corte && ultA.slice(0, 7) < corte.slice(0, 7)) add('media', 'Amortizaciones calculadas solo hasta ' + R.fecha(ultA), 'Falta correr la amortización en Tango desde esa fecha. Valor residual de los bienes: ' + f$(+hoy.af_residual) + '.', 'ActivoFijo', { clave: 'amort_hasta', valor: ultA });
+    if (+hoy.iva_ventas_sin_cuit > 0) add('media', hoy.iva_ventas_sin_cuit + ' comprobantes de venta sin CUIT del cliente', 'En el libro de IVA ventas no se puede identificar al comprador. Completar el CUIT en la ficha del cliente.', 'IVA', { clave: 'sin_cuit', valor: +hoy.iva_ventas_sin_cuit });
+    if (+hoy.afip_comprobantes === 0) add('info', 'No hay comprobantes de AFIP cargados para cruzar', 'Sin el listado de "Mis Comprobantes" no se puede controlar que las compras de Tango coincidan con lo que informaron los proveedores.', 'IVA', { clave: 'sin_afip' });
+    var lc = res ? res.lineas.filter(function (l) { return l.clave === 'costo'; })[0] : null, lv = res ? res.lineas[0] : null;
+    if (lc && lc.valor != null && lv && lc.valor > Math.max(lv.valor, 0)) add('alta', 'El costo laboral del período es mayor que las ventas' + (lv.valor > 0 ? ' (' + R.num(Math.round(10 * lc.valor / lv.valor) / 10) + ' veces)' : ''),
+      'Sueldos ' + f$(lc.valor) + ' contra ventas netas ' + f$(lv.valor) + '. O faltan ventas cargadas, o los sueldos y las ventas no son de la misma empresa o escala: revisar antes de sacar conclusiones del resultado.', 'Legajos', { clave: 'costo_mayor_ventas', valor: lv.valor > 0 ? Math.round(10 * lc.valor / lv.valor) / 10 : null });
+    if (res && res.iva && res.iva.saldo > 0) add('info', 'IVA del período: saldo a pagar ' + f$(res.iva.saldo), 'Débito ' + f$(res.iva.debito) + ' menos crédito ' + f$(res.iva.credito) + ' (meses completos, sin retenciones ni percepciones).', 'IVA', { clave: 'iva_saldo', valor: res.iva.saldo });
+    return s;
+  };
+
+  var fmt$ = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+  var fmt$2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 });
+  var fmtD = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
+  R.plata = function (v) { return v == null ? '—' : fmt$.format(v); };
+  R.plata2 = function (v) { return v == null ? '—' : fmt$2.format(v); };
+  R.num = function (v) { return fmtD.format(v); };
+  R.fecha = function (s) { if (!s) return '—'; var q = String(s).slice(0, 10).split('-'); return q[2] + '/' + q[1] + '/' + q[0]; };
+
+  if (typeof window.document === 'undefined') return;
+
+  // ---------------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------------
+  var VENTAS = null, COMPS = null, LINS = null, CORTE = null, MIN = null, MAX = null, HOY = null, MENSUAL = null, ERR_RES = null, graf = {};
+  var COL = { ventas: '#3987e5', compras: '#d95926', positivo: '#08A57A', negativo: '#e5484d', grilla: 'rgba(255,255,255,0.07)', texto: '#7C93A3', claro: '#F2F5F3' };
+  function el(id) { return document.getElementById(id); }
+  function nuevo(tag, clase, texto) { var e = document.createElement(tag); if (clase) e.className = clase; if (texto != null) e.textContent = texto; return e; }
+  function mesTxt(k) { var n = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return n[+k.slice(5, 7) - 1] + ' ' + k.slice(2, 4); }
+  function compacto(v) { var a = Math.abs(v); if (a >= 1e6) return fmtD.format(v / 1e6) + ' M'; if (a >= 1e3) return Math.round(v / 1e3) + ' mil'; return Math.round(v); }
+
+  // Abre un módulo con filtros ya puestos (lo leen Ventas y Compras al abrir).
+  window.abrirModuloFiltrado = function (modulo, f) {
+    var limpio = {}; Object.keys(f || {}).forEach(function (k) { if (f[k] != null && f[k] !== '') limpio[k] = f[k]; });
+    window.__filtroPendiente = { modulo: modulo, f: limpio };
+    var nav = document.querySelector('.nav-item[data-modulo="' + modulo + '"]'); if (nav) nav.click();
+  };
+
+  window.RADAR = { cargar: cargar };
+
+  function cargar() {
+    if (VENTAS) { dibujar(); return; }
+    el('rCuerpo').classList.add('cargando-suave');
+    Promise.all([sb.rpc('api_fecha_corte_v2'), sb.rpc('api_ventas_lineas_v2', {}), sb.rpc('api_compras_comprobantes_v2', {}), sb.rpc('api_compras_articulos_v2', {}),
+                 sb.rpc('api_radar_hoy_v2'), sb.rpc('api_radar_mensual_v2')]).then(function (rs) {
+      el('rCuerpo').classList.remove('cargando-suave');
+      var err = rs.slice(0, 4).map(function (r) { return r.error; }).filter(Boolean)[0];
+      // Si falla el resumen de los otros módulos, el radar de ventas y compras igual se muestra, con el aviso.
+      var errRes = rs.slice(4).map(function (r) { return r.error; }).filter(Boolean)[0];
+      if (errRes) { ERR_RES = textoError(errRes); HOY = null; MENSUAL = null; }
+      else { HOY = (rs[4].data && rs[4].data[0]) || null; MENSUAL = rs[5].data || []; }
+      if (err) { aviso('rMensaje', 'No se pudo armar el radar: ' + textoError(err)); return; }
+      var fc = (rs[0].data && rs[0].data[0]) || {};
+      VENTAS = (rs[1].data || []).map(function (l) { l.fecha = String(l.fecha).slice(0, 10); return l; });
+      COMPS = (rs[2].data || []).map(function (c) { c.fecha = String(c.fecha).slice(0, 10); return c; });
+      LINS = (rs[3].data || []).map(function (l) { l.fecha = String(l.fecha).slice(0, 10); return l; });
+      var fechas = VENTAS.map(function (l) { return l.fecha; }).concat(COMPS.map(function (c) { return c.fecha; })).sort();
+      MIN = fechas[0]; MAX = fechas[fechas.length - 1];
+      CORTE = fc.corte_recomendado ? String(fc.corte_recomendado).slice(0, 10) : MAX;
+      armar(); dibujar();
+    }).catch(function (e) { el('rCuerpo').classList.remove('cargando-suave'); aviso('rMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  function armar() {
+    var sp = el('rPeriodo'); sp.innerHTML = '';
+    var anios = {}; VENTAS.concat(COMPS).forEach(function (x) { anios[x.fecha.slice(0, 4)] = 1; });
+    [['12m', 'Últimos 12 meses al corte'], ['6m', 'Últimos 6 meses al corte'], ['3m', 'Últimos 3 meses al corte'], ['corte', 'Todo hasta el corte (' + R.fecha(CORTE) + ')']]
+      .concat(Object.keys(anios).sort().reverse().map(function (a) { return ['a' + a, 'Año ' + a + (a > CORTE.slice(0, 4) ? ' (después del corte)' : '')]; }))
+      .concat([['todo', 'Todo, incluso después del corte'], ['custom', 'Personalizado']])
+      .forEach(function (x) { sp.appendChild(new Option(x[1], x[0])); });
+    sp.value = '12m';
+    el('rDesde').min = el('rHasta').min = MIN; el('rDesde').max = el('rHasta').max = MAX;
+    sp.addEventListener('change', function () { dibujar(); });
+    ['rDesde', 'rHasta'].forEach(function (i) { el(i).addEventListener('change', function () { sp.value = 'custom'; dibujar(); }); });
+  }
+
+  function periodoActual() {
+    var p = R.periodo(el('rPeriodo').value, CORTE, MIN, MAX, el('rDesde').value, el('rHasta').value);
+    el('rDesde').value = p.desde; el('rHasta').value = p.hasta;
+    return p;
+  }
+
+  function dibujar() {
+    var p = periodoActual(), x = R.calcular(VENTAS, COMPS, LINS, p, CORTE, MENSUAL, HOY);
+    el('rCompara').textContent = 'Período: ' + R.fecha(p.desde) + ' al ' + R.fecha(p.hasta) + (p.antDesde ? ' · se compara con ' + R.fecha(p.antDesde) + ' al ' + R.fecha(p.antHasta) : ' · sin comparación') +
+      ' · Corte recomendado ' + R.fecha(CORTE) + ' (la última fecha con ventas y compras cargadas).';
+    [function () { kpis(x, p); }, function () { hoyKpis(x); }, function () { estadoRes(x, p); }, function () { grafRes(x); }, function () { grafMes(x); }, function () { senales(x); }, function () { tops(x, p); }, function () { modulos(x); }].forEach(function (fn) {
+      try { fn(); } catch (e) { console.error(e); aviso('rMensaje', 'Una parte del radar no se pudo dibujar: ' + e.message); }
+    });
+  }
+
+  function tarjeta(c, et, val, delta, nota, accion, invertir) {
+    var t = nuevo('div', 'kpi' + (accion ? ' clic' : '')); t.appendChild(nuevo('div', 'et', et));
+    t.appendChild(nuevo('div', 'val', val));
+    if (delta !== undefined) {
+      var cls = delta == null ? '' : (delta > 0 ? (invertir ? '' : 'sube') : delta < 0 ? (invertir ? '' : 'baja') : '');
+      t.appendChild(nuevo('span', 'r-delta ' + cls, delta == null ? 'sin comparación' : (delta > 0 ? '▲ +' : delta < 0 ? '▼ ' : '= ') + R.num(delta) + ' %'));
+    }
+    if (nota) t.appendChild(nuevo('div', 'nota', nota));
+    if (accion) { t.title = 'Abrir ' + accion.modulo; t.addEventListener('click', function () { window.abrirModuloFiltrado(accion.modulo, accion.f); }); }
+    c.appendChild(t);
+  }
+  function pts(a, b) { return a == null || b == null ? null : Math.round((a - b) * 10) / 10; }
+
+  function kpis(x, p) {
+    var c = el('rKpis'); c.innerHTML = ''; var per = { desde: p.desde, hasta: p.hasta };
+    tarjeta(c, 'Ventas netas', R.plata(x.ventas), x.hayAnt ? x.dVentas : undefined, x.hayAnt ? 'anterior ' + R.plata(x.ventasAnt) : 'sin impuestos, N/C restadas', { modulo: 'Ventas', f: per });
+    var dm = pts(x.margen_pct, x.margen_pct_ant);
+    tarjeta(c, 'Margen', x.margen_pct == null ? '—' : R.num(x.margen_pct) + ' %', undefined, 'cobertura de costo ' + (x.cobertura == null ? '—' : R.num(x.cobertura) + ' %') + (dm != null ? ' · ' + (dm > 0 ? '+' : '') + R.num(dm) + ' pts vs. anterior' : ''), { modulo: 'Ventas', f: { desde: p.desde, hasta: p.hasta, costo: 'con' } });
+    tarjeta(c, 'Compras sin IVA', R.plata(x.compras), x.hayAnt ? x.dCompras : undefined, 'neto gravado + exento' + (x.hayAnt ? ' · anterior ' + R.plata(x.comprasAnt) : ''), { modulo: 'Compras', f: per }, true);
+    tarjeta(c, 'Compras / ventas', x.ratio == null ? '—' : R.num(x.ratio) + ' %', undefined, 'por cada $100 vendidos' + (x.ratioAnt != null ? ' · anterior ' + R.num(x.ratioAnt) + ' %' : ''));
+    tarjeta(c, 'Clientes activos', String(x.clientes), undefined, x.hayAnt ? 'anterior ' + x.clientesAnt : 'con al menos una venta', { modulo: 'Ventas', f: per });
+    tarjeta(c, 'Ticket promedio', R.plata(x.ticket), x.hayAnt ? x.dTicket : undefined, 'venta neta / comprobantes', { modulo: 'Ventas', f: per });
+    tarjeta(c, 'Proveedores activos', String(x.proveedores), undefined, x.hayAnt ? 'anterior ' + x.proveedoresAnt : 'con al menos una compra', { modulo: 'Compras', f: per });
+    tarjeta(c, 'Pendiente de pago', R.plata(x.pendiente), undefined, x.n_pendiente + ' comprobantes PEN, a hoy', { modulo: 'Compras', f: { estado: 'PEN' } });
+  }
+
+  // Foto de hoy: una tarjeta por dato clave de cada módulo; clic abre el módulo.
+  function hoyKpis(x) {
+    var c = el('rHoy'); c.innerHTML = ''; var h = x.hoy;
+    if (!h) { c.classList.add('oculto'); aviso('rHoyMsg', 'No se pudo leer el resumen de Tesorería, Stock, Legajos, Activo Fijo e IVA' + (ERR_RES ? ': ' + ERR_RES : '.') + ' Lo de ventas y compras sí está al día.'); return; }
+    c.classList.remove('oculto'); el('rHoyMsg').className = 'mensaje oculto';
+    var ir = function (m) { return { modulo: m, f: {} }; };
+    tarjeta(c, 'Disponibilidades', R.plata(+h.disponibilidades), undefined, 'cajas ' + R.plata(+h.cajas) + ' · bancos ' + R.plata(+h.bancos), ir('Tesoreria'));
+    tarjeta(c, 'Cheques en cartera', R.plata(+h.cheques_cartera), undefined, h.n_cheques_cartera + ' cheques de terceros' + (+h.n_cheques_rechazados ? ' · ' + h.n_cheques_rechazados + ' rechazados' : ''), ir('Tesoreria'));
+    tarjeta(c, 'Stock valorizado', R.plata(+h.stock_valorizado), undefined, 'a costo vigente' + (+h.stock_sin_costo ? ' · ' + h.stock_sin_costo + ' artículos sin costo no suman' : ''), ir('Stock'));
+    tarjeta(c, 'Stock con problemas', String(+h.stock_negativos + +h.stock_bajo_minimo), undefined, h.stock_negativos + ' en negativo · ' + h.stock_bajo_minimo + ' bajo el mínimo', ir('Stock'));
+    tarjeta(c, 'Activo fijo', R.plata(+h.af_residual), undefined, 'valor residual de ' + h.af_bienes + ' bienes · amortizado ' + R.plata(+h.af_amortizado), ir('ActivoFijo'));
+    tarjeta(c, 'Dotación activa', h.puede_ver_sueldos ? String(h.dotacion_activa) : '🔒', undefined, h.puede_ver_sueldos ? 'personas en la empresa · sueldos hasta ' + (h.ultimo_mes_sueldos ? R.mesLargo(String(h.ultimo_mes_sueldos).slice(0, 7)) : '—') : 'solo super y admin ven sueldos', h.puede_ver_sueldos ? ir('Legajos') : null);
+    var iv = x.res ? x.res.iva : null;
+    tarjeta(c, 'IVA del período', iv ? R.plata(iv.saldo) : '—', undefined, iv ? 'débito ' + R.plata(iv.debito) + ' − crédito ' + R.plata(iv.credito) : '', ir('IVA'));
+    tarjeta(c, 'Ventas sin CUIT', String(h.iva_ventas_sin_cuit), undefined, 'comprobantes de venta sin CUIT del cliente', ir('IVA'));
+  }
+
+  // Estado de resultados: una fila por concepto, con su nota de cobertura; al final el resultado.
+  function estadoRes(x, p) {
+    var tb = el('rER'); tb.innerHTML = ''; el('rErAviso').className = 'mensaje oculto';
+    el('rErAnt').textContent = p.antDesde ? 'Anterior' : '—';
+    if (!x.res) { var tr0 = nuevo('tr'); var td0 = nuevo('td', 'gris', 'Sin datos de sueldos y amortizaciones: no se puede armar.'); td0.colSpan = 3; tr0.appendChild(td0); tb.appendChild(tr0); return; }
+    var r = x.res;
+    r.lineas.forEach(function (l) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Abrir ' + l.modulo;
+      var td = nuevo('td', null, (l.signo < 0 ? '− ' : '') + l.concepto); if (l.incompleto) td.appendChild(nuevo('span', 'falta', '⚠ incompleto'));
+      tr.appendChild(td);
+      tr.appendChild(nuevo('td', 'num', l.valor == null ? '—' : R.plata(l.valor)));
+      tr.appendChild(nuevo('td', 'num gris', !p.antDesde || l.ant == null ? '—' : R.plata(l.ant)));
+      var f = (l.modulo === 'Ventas' || l.modulo === 'Compras') ? { desde: p.desde, hasta: p.hasta } : {};
+      tr.addEventListener('click', function () { window.abrirModuloFiltrado(l.modulo, f); });
+      tb.appendChild(tr);
+      var tn = nuevo('tr'); var n = nuevo('td', 'nota', l.nota); n.colSpan = 3; tn.appendChild(n); tb.appendChild(tn);
+    });
+    var tt = nuevo('tr', 'r-total');
+    tt.appendChild(nuevo('td', null, 'Resultado' + (r.faltan.length ? ' (parcial)' : '')));
+    tt.appendChild(nuevo('td', 'num' + (r.resultado < 0 ? ' neg' : ''), R.plata(r.resultado)));
+    tt.appendChild(nuevo('td', 'num gris', r.resultadoAnt == null ? '—' : R.plata(r.resultadoAnt) + (r.dResultado != null ? ' (' + (r.dResultado > 0 ? '+' : '') + R.num(r.dResultado) + ' %)' : '')));
+    tb.appendChild(tt);
+    var ts = nuevo('tr', 'r-sep'); var s1 = nuevo('td', 'gris', 'Aparte · IVA del período (débito − crédito)'); ts.appendChild(s1);
+    ts.appendChild(nuevo('td', 'num gris', R.plata(r.iva.saldo))); ts.appendChild(nuevo('td', 'num gris', r.iva.ant == null ? '—' : R.plata(r.iva.ant))); tb.appendChild(ts);
+    if (r.faltan.length) aviso('rErAviso', 'Resultado parcial: ' + r.faltan.join(', ') + ' no cubren todo el período (ver la nota de cada línea). Con lo que falta, el resultado real es menor.', 'info');
+  }
+
+  function grafRes(x) {
+    if (graf.res) { graf.res.destroy(); graf.res = null; }
+    if (!x.res) return;
+    var m = x.res.porMes;
+    var cfg = { type: 'bar', data: { labels: m.map(function (q) { return mesTxt(q.mes); }), datasets: [
+        { label: 'Resultado', data: m.map(function (q) { return q.resultado; }), backgroundColor: m.map(function (q) { return q.resultado < 0 ? COL.negativo : COL.positivo; }), borderRadius: 3, maxBarThickness: 22 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+        plugins: { legend: { display: false },
+          tooltip: { backgroundColor: '#09233A', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, titleColor: COL.texto, bodyColor: COL.claro, padding: 10,
+            callbacks: { label: function (c) { var q = m[c.dataIndex]; return ['Resultado: ' + R.plata(q.resultado), 'Ventas: ' + R.plata(q.ventas), 'Compras: ' + R.plata(q.compras),
+              'Sueldos: ' + (q.costo == null ? 'sin datos' : R.plata(q.costo)), 'Amortizaciones: ' + (q.amort == null ? 'sin datos' : R.plata(q.amort))]; } } } },
+        scales: { x: { grid: { display: false }, ticks: { color: COL.texto, font: { size: 10.5 } }, border: { color: 'rgba(255,255,255,.12)' } },
+                  y: { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } } },
+        onHover: function (e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; },
+        onClick: function (e, act) {
+          if (!act.length) return; var k = m[act[0].index].mes; var fin = new Date(+k.slice(0, 4), +k.slice(5, 7), 0);
+          window.abrirModuloFiltrado('Ventas', { desde: k + '-01', hasta: k + '-' + String(fin.getDate()).padStart(2, '0') }); } } };
+    graf.res = new Chart(el('rChRes'), cfg);
+  }
+
+  function grafMes(x) {
+    var m = x.meses;
+    var cfg = { type: 'bar', data: { labels: m.map(function (q) { return mesTxt(q.mes); }), datasets: [
+        { label: 'Ventas netas', data: m.map(function (q) { return q.ventas; }), backgroundColor: COL.ventas, borderRadius: 3, maxBarThickness: 18 },
+        { label: 'Compras sin IVA', data: m.map(function (q) { return q.compras; }), backgroundColor: COL.compras, borderRadius: 3, maxBarThickness: 18 }] },
+      options: { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+        plugins: { legend: { display: true, position: 'top', align: 'end', labels: { color: COL.claro, boxWidth: 10, boxHeight: 10, font: { size: 11.5 } } },
+          tooltip: { backgroundColor: '#09233A', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, titleColor: COL.texto, bodyColor: COL.claro, padding: 10,
+            callbacks: { label: function (c) { return c.dataset.label + ': ' + R.plata(c.raw); } } } },
+        scales: { x: { grid: { display: false }, ticks: { color: COL.texto, font: { size: 10.5 } }, border: { color: 'rgba(255,255,255,.12)' } },
+                  y: { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } } },
+        onHover: function (e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; },
+        onClick: function (e, act) {
+          if (!act.length) return; var k = m[act[0].index].mes; var fin = new Date(+k.slice(0, 4), +k.slice(5, 7), 0);
+          var f = { desde: k + '-01', hasta: k + '-' + String(fin.getDate()).padStart(2, '0') };
+          window.abrirModuloFiltrado(act[0].datasetIndex === 1 ? 'Compras' : 'Ventas', f); } } };
+    if (graf.mes) graf.mes.destroy();
+    graf.mes = new Chart(el('rChMes'), cfg);
+  }
+
+  function senales(x) {
+    var c = el('rSenales'); c.innerHTML = '';
+    var n = { alta: 0, media: 0, info: 0 }; x.senales.forEach(function (s) { n[s.nivel]++; });
+    el('rSubSen').textContent = '· ' + n.alta + ' altas, ' + n.media + ' a revisar, ' + n.info + ' informativas';
+    var nombres = { alta: 'Alta', media: 'A revisar', info: 'Informativa' };
+    x.senales.forEach(function (s) {
+      var d = nuevo('div', 'senal ' + s.nivel), t = nuevo('div', 't');
+      t.appendChild(nuevo('span', null, s.titulo)); t.appendChild(nuevo('span', 'nivel', nombres[s.nivel])); d.appendChild(t);
+      d.appendChild(nuevo('div', 'd', s.detalle));
+      if (s.accion) { var b = nuevo('button', 'btn secundario chico', 'Ver en ' + s.accion.modulo + ' ›'); b.addEventListener('click', function () { window.abrirModuloFiltrado(s.accion.modulo, s.accion.f); }); d.appendChild(b); }
+      c.appendChild(d);
+    });
+    if (!x.senales.length) c.appendChild(nuevo('div', 'gris', 'Sin señales para este período.'));
+  }
+
+  function fila(tb, celdas, accion) {
+    var tr = nuevo('tr', 'clic'); tr.title = 'Abrir ' + accion.modulo + ' filtrado';
+    celdas.forEach(function (c) { tr.appendChild(nuevo('td', c[1] || null, c[0])); });
+    tr.addEventListener('click', function () { window.abrirModuloFiltrado(accion.modulo, accion.f); });
+    tb.appendChild(tr);
+  }
+  function vacio(tb, n) { if (!tb.children.length) { var tr = nuevo('tr'); var td = nuevo('td', 'gris', 'Sin datos en el período.'); td.colSpan = n; tr.appendChild(td); tb.appendChild(tr); } }
+
+  function tops(x, p) {
+    var per = { desde: p.desde, hasta: p.hasta };
+    var a = el('rTopCli'); a.innerHTML = '';
+    x.topClientes.forEach(function (r) { fila(a, [[r.nombre], [R.plata(r.venta), 'num'], [!x.hayAnt ? '—' : r.delta == null ? 'nuevo' : (r.delta > 0 ? '+' : '') + R.num(r.delta) + ' %', 'num ' + (r.delta > 0 ? 'sube' : r.delta < 0 ? 'neg' : '')]], { modulo: 'Ventas', f: Object.assign({ cliente: r.clave }, per) }); });
+    vacio(a, 3);
+    var b = el('rTopArt'); b.innerHTML = '';
+    x.topArticulos.forEach(function (r) { fila(b, [[r.nombre], [R.plata(r.venta), 'num'], [r.margen_pct == null ? 'sin costo' : R.num(r.margen_pct) + ' %', 'num' + (r.margen_pct < 0 ? ' neg' : '')]], { modulo: 'Ventas', f: Object.assign({ articulo: r.clave }, per) }); });
+    vacio(b, 3);
+    var c = el('rTopPro'); c.innerHTML = '';
+    x.topProveedores.forEach(function (r) { fila(c, [[r.nombre], [R.plata(r.valor), 'num'], [r.pct == null ? '—' : R.num(r.pct) + ' %', 'num']], { modulo: 'Compras', f: Object.assign({ proveedor: r.clave }, per) }); });
+    vacio(c, 3);
+  }
+
+  function modulos(x) {
+    var c = el('rModulos'); c.innerHTML = ''; var ok = !!x.hoy;
+    [['Ventas', 1], ['Compras', 1], ['Stock', ok], ['Tesorería', ok], ['Legajos', ok && x.hoy.puede_ver_sueldos ? 1 : ok ? 'permiso' : 0], ['Activo Fijo', ok], ['IVA', ok]].forEach(function (m) {
+      var t = m[1] === 'permiso' ? '🔒 Legajos · sin permiso de sueldos' : m[1] ? '✓ ' + m[0] + ' · probado' : '✗ ' + m[0] + ' · no se pudo leer';
+      c.appendChild(nuevo('span', 'r-mod' + (m[1] === 'permiso' ? '' : m[1] ? ' ok' : ' mal'), t));
+    });
+  }
+})();
+</script>

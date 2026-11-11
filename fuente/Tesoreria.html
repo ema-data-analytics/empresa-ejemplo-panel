@@ -1,0 +1,446 @@
+<!-- ============ MODULO TESORERIA ============ -->
+<!-- Usa los estilos comunes de pantalla que define el módulo Ventas (y .kpis.s8 / .etq de Stock); acá solo van los propios. -->
+<style>
+  .t-aviso { font-size:12px; color:var(--amber); margin:0 0 12px; line-height:1.5; }
+  .t-nota { font-size:12px; color:var(--gray); margin:0 0 12px; line-height:1.5; }
+</style>
+
+<section class="modulo" id="modTesoreria">
+  <div class="filtros">
+    <div class="fila-filtros">
+      <div class="filtro"><label for="tfPeriodo">Período</label><select id="tfPeriodo"></select></div>
+      <div class="filtro"><label for="tfDesde">Desde</label><input type="date" id="tfDesde"></div>
+      <div class="filtro"><label for="tfHasta">Hasta</label><input type="date" id="tfHasta"></div>
+      <div class="filtro"><label for="tfGrupo">Grupo de cuentas</label><select id="tfGrupo"></select></div>
+      <div class="filtro"><label for="tfCuenta">Cuenta</label><select id="tfCuenta"></select></div>
+      <div class="filtro"><label for="tfComp">Comprobante</label><select id="tfComp"></select></div>
+      <div class="filtro"><label for="tfSituacion">Anulaciones</label>
+        <select id="tfSituacion"><option value="">Incluir (como en Tango)</option><option value="sin">Sin anulados ni reversiones</option><option value="solo">Solo anulados y reversiones</option></select></div>
+      <div class="filtro ancho"><label for="tfTexto">Buscar</label><input type="text" id="tfTexto" placeholder="Leyenda, cuenta, cliente, proveedor, número…"></div>
+    </div>
+    <div class="chips" id="tChips"></div>
+  </div>
+
+  <div id="tMensaje" class="mensaje oculto"></div>
+  <div id="tCuerpo">
+    <div class="t-nota">Los saldos son saldo inicial + movimientos, a hoy. Ingresos y egresos son el efecto neto de cada comprobante sobre las cuentas de fondo: los pases entre cajas y bancos no cuentan como ingreso ni egreso.</div>
+    <div class="t-aviso" id="tAviso"></div>
+    <div class="kpis s8" id="tKpis"></div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Movimiento de fondos <span class="sub" id="tSubMes"></span></span>
+          <span class="tabs" id="tTabsMes"><button data-m="flujo" class="on">Ingresos y egresos</button><button data-m="saldo">Saldo a fin de mes</button></span></h3>
+        <div class="lienzo"><canvas id="tChMes" aria-label="Movimiento de fondos por mes"></canvas></div>
+        <div class="ayuda">Clic en un mes: filtra ese mes.</div>
+      </div>
+      <div class="panel">
+        <h3><span>¿De dónde viene y adónde va? <span class="sub">top 10</span></span>
+          <span class="tabs" id="tTabsRank"><button data-d="destino" class="on">Destino de los pagos</button><button data-d="origen">Origen de los ingresos</button></span></h3>
+        <div class="lienzo alto"><canvas id="tChRank" aria-label="Destino y origen de los fondos"></canvas></div>
+        <div class="ayuda" id="tAyudaRank"></div>
+      </div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3>Saldos por cuenta <span class="sub">a hoy</span></h3>
+        <div class="tabla-scroll" style="max-height:420px"><table>
+          <thead><tr><th>Cuenta</th><th>Grupo</th><th class="num">Saldo</th><th class="num">Ficha de Tango</th></tr></thead>
+          <tbody id="tTablaCtas"></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h3>Por tipo de comprobante <span class="sub">en el período</span></h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Comprobante</th><th class="num">Cant.</th><th class="num">Ingresos</th><th class="num">Egresos</th></tr></thead>
+          <tbody id="tTablaComp"></tbody></table></div>
+        <h3 style="margin-top:18px">Cheques de terceros</h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Estado</th><th class="num">Cheques</th><th class="num">Importe</th></tr></thead>
+          <tbody id="tTablaCheq"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3><span>Detalle <span class="sub" id="tSubDet"></span></span>
+        <span><span class="tabs" id="tTabsDet"><button data-v="mov" class="on">Movimientos</button><button data-v="cheq">Cheques</button></span>
+        <button class="btn secundario chico" id="tBtnCsv">Descargar CSV</button></span></h3>
+      <div class="tabla-scroll"><table>
+        <thead><tr id="tCabDet"></tr></thead>
+        <tbody id="tTablaDet"></tbody></table></div>
+      <div class="pie-tabla"><span id="tPagInfo"></span>
+        <span><button class="btn secundario chico" id="tPagAnt">‹ Anterior</button> <button class="btn secundario chico" id="tPagSig">Siguiente ›</button></span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Lógica pura. cuentas = api_tesoreria_cuentas_v2; movs = api_tesoreria_movimientos_v2 (importe: +debe -haber); cheques = api_tesoreria_cheques_v2.
+  // ---------------------------------------------------------------------------
+  var T = window.TesoreriaLogica = {};
+  function r2(x) { return Math.round(x * 100) / 100; }
+  T.SIT = { N: 'Normal', A: 'Anulado', C: 'Reversión de un anulado' };
+  T.CHEQ = { C: 'En cartera', A: 'Aplicado (depositado o entregado)', R: 'Rechazado', X: 'Anulado' };
+  T.nombreCheq = function (e) { return (T.CHEQ[e] || 'Estado ' + e) + ' (' + e + ')'; };
+
+  // Filtro de cuentas (grupo o cuenta). grupo: 'fondos' | 'contra' | nombre de grupo.
+  T.cuentaPasa = function (x, f) {
+    if (f.cuenta && String(x.cod_cta) !== String(f.cuenta)) return false;
+    if (f.grupo === 'fondos' && !x.es_fondo) return false;
+    if (f.grupo === 'contra' && x.es_fondo) return false;
+    if (f.grupo && f.grupo !== 'fondos' && f.grupo !== 'contra' && x.grupo !== f.grupo) return false;
+    return true;
+  };
+
+  T.filtrarMovs = function (movs, f) {
+    var txt = (f.texto || '').trim().toLowerCase();
+    return movs.filter(function (m) {
+      if (f.desde && m.fecha < f.desde) return false;
+      if (f.hasta && m.fecha > f.hasta) return false;
+      if (f.comp && m.cod_comp !== f.comp) return false;
+      if (f.situacion === 'sin' && (m.situacion === 'A' || m.situacion === 'C')) return false;
+      if (f.situacion === 'solo' && !(m.situacion === 'A' || m.situacion === 'C')) return false;
+      if (!T.cuentaPasa(m, f)) return false;
+      if (txt && [m.leyenda, m.cuenta, m.cliente, m.proveedor, m.n_comp, m.comprobante].join(' ').toLowerCase().indexOf(txt) < 0) return false;
+      return true;
+    });
+  };
+
+  // Efecto neto de cada comprobante sobre las cuentas de fondo que quedaron en movs (los pases internos dan 0).
+  T.flujos = function (movs) {
+    var g = {};
+    movs.forEach(function (m) {
+      if (!m.es_fondo) return;
+      var k = m.id_sba04; if (!g[k]) g[k] = { id: k, fecha: m.fecha, cod_comp: m.cod_comp, comprobante: m.comprobante, neto: 0 };
+      g[k].neto += +m.importe;
+    });
+    return Object.keys(g).map(function (k) { g[k].neto = r2(g[k].neto); return g[k]; });
+  };
+
+  T.kpis = function (cuentas, movs, cheques, f) {
+    var k = { disponible: 0, cajas: 0, bancos: 0, valores: 0, tarjetas: 0, ingresos: 0, egresos: 0, cartera: 0, n_cartera: 0, cuentas_dif: 0 };
+    cuentas.forEach(function (c) {
+      if (!c.es_fondo || !T.cuentaPasa(c, f)) return;
+      k.disponible += +c.saldo;
+      if (c.grupo === 'Cajas y otros fondos') k.cajas += +c.saldo; else if (c.grupo === 'Bancos') k.bancos += +c.saldo;
+      else if (c.grupo === 'Valores a depositar') k.valores += +c.saldo; else if (c.grupo === 'Tarjetas') k.tarjetas += +c.saldo;
+    });
+    cuentas.forEach(function (c) { if (T.cuentaPasa(c, f) && Math.abs(+c.diferencia_ficha) >= 0.01) k.cuentas_dif++; });
+    T.flujos(movs).forEach(function (x) { if (x.neto > 0) k.ingresos += x.neto; else k.egresos += -x.neto; });
+    cheques.forEach(function (q) { if (q.estado === 'C') { k.cartera += +q.importe; k.n_cartera++; } });
+    ['disponible', 'cajas', 'bancos', 'valores', 'tarjetas', 'ingresos', 'egresos', 'cartera'].forEach(function (x) { k[x] = r2(k[x]); });
+    k.neto = r2(k.ingresos - k.egresos);
+    return k;
+  };
+
+  T.porMes = function (movs) {
+    var m = {};
+    T.flujos(movs).forEach(function (x) { var q = x.fecha.slice(0, 7); if (!m[q]) m[q] = { mes: q, ingresos: 0, egresos: 0 }; if (x.neto > 0) m[q].ingresos += x.neto; else m[q].egresos += -x.neto; });
+    return Object.keys(m).sort().map(function (q) { return { mes: q, ingresos: r2(m[q].ingresos), egresos: r2(m[q].egresos), neto: r2(m[q].ingresos - m[q].egresos) }; });
+  };
+
+  // Saldo de las cuentas de fondo elegidas al cierre de cada mes entre desde y hasta (saldo inicial + todos los movimientos hasta esa fecha).
+  T.saldoMensual = function (cuentas, movsTodos, f, desde, hasta) {
+    var base = 0; cuentas.forEach(function (c) { if (c.es_fondo && T.cuentaPasa(c, f)) base += +c.saldo_inicial; });
+    var lin = movsTodos.filter(function (m) { return m.es_fondo && T.cuentaPasa(m, f); }).sort(function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; });
+    var out = [], k = desde.slice(0, 7), fin = hasta.slice(0, 7), i = 0, acum = base, n = 0;
+    while (k <= fin && n < 600) {
+      var d = new Date(+k.slice(0, 4), +k.slice(5, 7), 0), cierre = k + '-' + String(d.getDate()).padStart(2, '0');
+      while (i < lin.length && lin[i].fecha <= cierre) { acum += +lin[i].importe; i++; }
+      out.push({ mes: k, saldo: r2(acum) });
+      var s = new Date(+k.slice(0, 4), +k.slice(5, 7), 1); k = s.getFullYear() + '-' + String(s.getMonth() + 1).padStart(2, '0'); n++;
+    }
+    return out;
+  };
+
+  // Contrapartidas: debe en cuentas que no son de fondo = destino de los pagos; haber = origen de los ingresos.
+  T.contrapartidas = function (movs, lado, n) {
+    var g = {};
+    movs.forEach(function (m) {
+      if (m.es_fondo) return;
+      var v = lado === 'destino' ? +m.debe : +m.haber; if (!v) return;
+      var k = m.cod_cta; if (!g[k]) g[k] = { clave: k, nombre: m.cuenta, valor: 0 };
+      g[k].valor += v;
+    });
+    var arr = Object.keys(g).map(function (k) { g[k].valor = r2(g[k].valor); return g[k]; }).sort(function (a, b) { return b.valor - a.valor; });
+    if (arr.length > n) { var resto = arr.slice(n).reduce(function (t, x) { return t + x.valor; }, 0), tot = arr.length; arr = arr.slice(0, n); arr.push({ clave: null, nombre: 'Otros (' + (tot - n) + ')', valor: r2(resto) }); }
+    return arr;
+  };
+
+  T.porComprobante = function (movs) {
+    var g = {};
+    T.flujos(movs).forEach(function (x) { var k = x.cod_comp; if (!g[k]) g[k] = { clave: k, nombre: x.comprobante, cantidad: 0, ingresos: 0, egresos: 0 }; g[k].cantidad++; if (x.neto > 0) g[k].ingresos += x.neto; else g[k].egresos += -x.neto; });
+    return Object.keys(g).map(function (k) { var x = g[k]; x.ingresos = r2(x.ingresos); x.egresos = r2(x.egresos); return x; })
+      .sort(function (a, b) { return (b.ingresos + b.egresos) - (a.ingresos + a.egresos); });
+  };
+
+  T.cheques = function (cheques) {
+    var g = {};
+    cheques.forEach(function (q) { var k = q.estado; if (!g[k]) g[k] = { clave: k, cantidad: 0, importe: 0 }; g[k].cantidad++; g[k].importe += +q.importe; });
+    return Object.keys(g).map(function (k) { g[k].importe = r2(g[k].importe); return g[k]; }).sort(function (a, b) { return b.importe - a.importe; });
+  };
+
+  if (typeof window.document === 'undefined') return;
+
+  // ---------------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------------
+  var CTAS = null, MOVS = null, CHEQ = null, F = {}, graf = {}, vistaMes = 'flujo', lado = 'destino', vista = 'mov', MIN = null, MAX = null;
+  var orden = { col: 'fecha', dir: -1 }, pagina = 0, POR_PAG = 25;
+  var COL = { azul: '#3987e5', naranja: '#d95926', aqua: '#199e70', rojo: '#e66767', grilla: 'rgba(255,255,255,0.07)', texto: '#7C93A3', claro: '#F2F5F3' };
+  var fmt$ = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+  var fmt$2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 });
+  var fmtN = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  var fmtD = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
+  function g$(x) { return x == null ? '—' : fmt$.format(x); }
+  function el(id) { return document.getElementById(id); }
+  function fechaTxt(s) { if (!s) return '—'; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function mesTxt(k) { var n = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return n[+k.slice(5, 7) - 1] + ' ' + k.slice(2, 4); }
+  function nuevo(tag, clase, texto) { var e = document.createElement(tag); if (clase) e.className = clase; if (texto != null) e.textContent = texto; return e; }
+  function compacto(v) { var a = Math.abs(v); if (a >= 1e6) return fmtD.format(v / 1e6) + ' M'; if (a >= 1e3) return fmtN.format(v / 1e3) + ' mil'; return fmtN.format(v); }
+
+  window.MODULOS = window.MODULOS || {};
+  window.MODULOS.Tesoreria = { titulo: 'Tesorería', cargar: cargar };
+
+  function cargar() {
+    if (CTAS) { dibujar(); return; }
+    el('tCuerpo').classList.add('cargando-suave');
+    Promise.all([sb.rpc('api_tesoreria_cuentas_v2'), sb.rpc('api_tesoreria_movimientos_v2', {}), sb.rpc('api_tesoreria_cheques_v2')]).then(function (rs) {
+      el('tCuerpo').classList.remove('cargando-suave');
+      var err = rs.map(function (r) { return r.error; }).filter(Boolean)[0];
+      if (err) { aviso('tMensaje', 'No se pudo leer tesorería: ' + textoError(err)); return; }
+      CTAS = rs[0].data || [];
+      MOVS = (rs[1].data || []).map(function (m) { m.fecha = String(m.fecha).slice(0, 10); return m; });
+      CHEQ = (rs[2].data || []).map(function (q) { ['fecha_emision', 'fecha_cheque', 'fecha_recepcion', 'fecha_salida'].forEach(function (k) { if (q[k]) q[k] = String(q[k]).slice(0, 10); }); return q; });
+      armarFiltros(); dibujar();
+    }).catch(function (e) { el('tCuerpo').classList.remove('cargando-suave'); aviso('tMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  var IDS = { desde: 'tfDesde', hasta: 'tfHasta', grupo: 'tfGrupo', cuenta: 'tfCuenta', comp: 'tfComp', situacion: 'tfSituacion', texto: 'tfTexto' };
+  function opciones(sel, pares, todos) { sel.innerHTML = ''; sel.appendChild(new Option(todos, '')); pares.forEach(function (p) { sel.appendChild(new Option(p[1], p[0])); }); }
+
+  function armarFiltros() {
+    var fechas = MOVS.map(function (m) { return m.fecha; }).sort(); MIN = fechas[0]; MAX = fechas[fechas.length - 1];
+    el('tfDesde').min = el('tfHasta').min = MIN; el('tfDesde').max = el('tfHasta').max = MAX;
+    var anios = {}; MOVS.forEach(function (m) { anios[m.fecha.slice(0, 4)] = 1; });
+    var per = [['todo', 'Todo (' + fechaTxt(MIN) + ' al ' + fechaTxt(MAX) + ')'], ['12m', 'Últimos 12 meses con datos'], ['6m', 'Últimos 6 meses con datos']];
+    Object.keys(anios).sort().reverse().forEach(function (a) { per.push(['a' + a, 'Año ' + a]); }); per.push(['custom', 'Personalizado']);
+    var sp = el('tfPeriodo'); sp.innerHTML = ''; per.forEach(function (p) { sp.appendChild(new Option(p[1], p[0])); });
+    var grupos = {}; CTAS.forEach(function (c) { grupos[c.grupo] = 1; });
+    opciones(el('tfGrupo'), [['fondos', 'Solo cuentas de fondo'], ['contra', 'Solo contrapartidas']].concat(Object.keys(grupos).sort().map(function (g) { return [g, g]; })), 'Todas');
+    el('tfGrupo').value = 'fondos'; F.grupo = 'fondos';
+    opciones(el('tfCuenta'), CTAS.filter(function (c) { return +c.movimientos > 0 || +c.saldo !== 0; }).map(function (c) { return [String(c.cod_cta), c.cuenta + (c.es_fondo ? '' : ' (contrapartida)')]; }).sort(function (a, b) { return a[1].localeCompare(b[1]); }), 'Todas');
+    var comps = {}; MOVS.forEach(function (m) { comps[m.cod_comp] = m.comprobante; });
+    opciones(el('tfComp'), Object.keys(comps).sort().map(function (k) { return [k, comps[k] + ' (' + k + ')']; }), 'Todos');
+
+    var dif = CTAS.filter(function (c) { return Math.abs(+c.diferencia_ficha) >= 0.01; });
+    el('tAviso').textContent = dif.length ? '⚠ En ' + dif.length + ' cuentas el saldo que guarda la ficha de Tango no coincide con sus movimientos (' + dif.map(function (c) { return c.cuenta; }).join(', ') + '). Acá se usa el saldo que dan los movimientos; la diferencia se ve en "Saldos por cuenta".' : '';
+
+    sp.addEventListener('change', function () {
+      var v = sp.value, d = null, h = null;
+      if (v === '12m' || v === '6m') { var n = v === '12m' ? 12 : 6; var x = new Date(MAX + 'T00:00:00'); x.setMonth(x.getMonth() - n); x.setDate(x.getDate() + 1); d = x.toISOString().slice(0, 10); h = MAX; }
+      else if (v.charAt(0) === 'a') { d = v.slice(1) + '-01-01'; h = v.slice(1) + '-12-31'; }
+      else if (v === 'custom') { return; }
+      F.desde = d; F.hasta = h; el('tfDesde').value = d || ''; el('tfHasta').value = h || ''; pagina = 0; dibujar();
+    });
+    ['desde', 'hasta'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; el('tfPeriodo').value = 'custom'; pagina = 0; dibujar(); }); });
+    ['grupo', 'cuenta', 'comp', 'situacion'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; pagina = 0; dibujar(); }); });
+    var t = null; el('tfTexto').addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { F.texto = el('tfTexto').value; pagina = 0; dibujar(); }, 250); });
+    el('tTabsMes').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; vistaMes = b.dataset.m; marcarTab('tTabsMes', b); dibujarMes(datos()); });
+    el('tTabsRank').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; lado = b.dataset.d; marcarTab('tTabsRank', b); dibujarRank(datos()); });
+    el('tTabsDet').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; vista = b.dataset.v; estadoCheq = null; orden = { col: vista === 'mov' ? 'fecha' : 'fecha_cheque', dir: -1 }; pagina = 0; marcarTab('tTabsDet', b); dibujarDetalle(datos()); });
+    el('tPagAnt').addEventListener('click', function () { if (pagina > 0) { pagina--; dibujarDetalle(datos()); } });
+    el('tPagSig').addEventListener('click', function () { pagina++; dibujarDetalle(datos()); });
+    el('tBtnCsv').addEventListener('click', descargarCsv);
+  }
+  function marcarTab(id, b) { el(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); }
+
+  // movs: filtrados por todo; movsCtr: mismo período y comprobante pero todas las cuentas (para ver contrapartidas de esos comprobantes).
+  function datos() {
+    var movs = T.filtrarMovs(MOVS, F);
+    var ids = {}; movs.forEach(function (m) { ids[m.id_sba04] = 1; });
+    var movsCtr = MOVS.filter(function (m) { return ids[m.id_sba04]; });
+    if (F.situacion === 'sin') movsCtr = movsCtr.filter(function (m) { return m.situacion !== 'A' && m.situacion !== 'C'; });
+    return { movs: movs, movsCtr: movsCtr };
+  }
+  function ponerFiltro(k, v) { F[k] = v; pagina = 0; if (IDS[k]) el(IDS[k]).value = v || ''; dibujar(); }
+
+  function dibujarChips() {
+    var c = el('tChips'); c.innerHTML = '';
+    var nombres = { desde: 'Desde', hasta: 'Hasta', grupo: 'Cuentas', cuenta: 'Cuenta', comp: 'Comprobante', situacion: 'Anulaciones', texto: 'Buscar' };
+    var hay = false;
+    Object.keys(nombres).forEach(function (k) {
+      if (!F[k]) return; hay = true;
+      var v = F[k], s = el(IDS[k]);
+      if (s.tagName === 'SELECT' && s.options[s.selectedIndex]) v = s.options[s.selectedIndex].text;
+      if (k === 'desde' || k === 'hasta') v = fechaTxt(v);
+      var ch = nuevo('span', 'chip-f', nombres[k] + ': ' + v), x = nuevo('button', null, '×'); x.title = 'Quitar';
+      x.addEventListener('click', function () { F[k] = null; el(IDS[k]).value = ''; if (k === 'desde' || k === 'hasta') el('tfPeriodo').value = 'custom'; pagina = 0; dibujar(); });
+      ch.appendChild(x); c.appendChild(ch);
+    });
+    if (hay) { var lim = nuevo('button', 'btn secundario chico', 'Limpiar todo');
+      lim.addEventListener('click', function () { F = {}; Object.keys(IDS).forEach(function (k) { el(IDS[k]).value = ''; }); el('tfPeriodo').value = 'todo'; pagina = 0; dibujar(); }); c.appendChild(lim); }
+  }
+
+  function dibujar() {
+    var d = datos();
+    [dibujarChips, dibujarKpis, dibujarMes, dibujarRank, dibujarTablas, dibujarDetalle].forEach(function (fn) {
+      try { fn(d); } catch (e) { console.error(e); aviso('tMensaje', 'Una parte de la pantalla no se pudo dibujar: ' + e.message); }
+    });
+  }
+
+  function tarjeta(cont, et, val, nota, clase, alClic) {
+    var t = nuevo('div', 'kpi'); t.appendChild(nuevo('div', 'et', et)); t.appendChild(nuevo('div', 'val' + (clase ? ' ' + clase : ''), val));
+    if (nota) t.appendChild(nuevo('div', 'nota', nota));
+    if (alClic) { t.style.cursor = 'pointer'; t.addEventListener('click', alClic); }
+    cont.appendChild(t);
+  }
+
+  function dibujarKpis(d) {
+    var k = T.kpis(CTAS, d.movs, CHEQ, F), c = el('tKpis'); c.innerHTML = '';
+    tarjeta(c, 'Disponibilidades', g$(k.disponible), 'saldo de las cuentas de fondo elegidas, a hoy', k.disponible < 0 ? 'neg' : '');
+    tarjeta(c, 'Cajas', g$(k.cajas), null, null, function () { ponerFiltro('grupo', 'Cajas y otros fondos'); });
+    tarjeta(c, 'Bancos', g$(k.bancos), null, k.bancos < 0 ? 'neg' : '', function () { ponerFiltro('grupo', 'Bancos'); });
+    tarjeta(c, 'Cheques en cartera', g$(k.cartera), fmtN.format(k.n_cartera) + ' cheques de terceros', null, function () { vista = 'cheq'; estadoCheq = 'C'; marcarTab('tTabsDet', el('tTabsDet').querySelector('[data-v="cheq"]')); orden = { col: 'fecha_cheque', dir: 1 }; pagina = 0; dibujarDetalle(datos()); el('tTablaDet').scrollIntoView({ behavior: 'smooth' }); });
+    tarjeta(c, 'Tarjetas a cobrar', g$(k.tarjetas), null, null, function () { ponerFiltro('grupo', 'Tarjetas'); });
+    tarjeta(c, 'Ingresos del período', g$(k.ingresos), 'entradas netas a cuentas de fondo');
+    tarjeta(c, 'Egresos del período', g$(k.egresos), 'salidas netas de cuentas de fondo');
+    tarjeta(c, 'Neto del período', g$(k.neto), 'ingresos − egresos', k.neto < 0 ? 'neg' : '');
+    el('tSubDet').textContent = '· ' + fmtN.format(d.movs.length) + ' renglones, ' + fmtN.format(CHEQ.length) + ' cheques';
+  }
+
+  function opcionesBase(extra) {
+    var o = { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#09233A', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, titleColor: COL.texto, bodyColor: COL.claro, bodyFont: { weight: '600' }, padding: 10, displayColors: false } },
+      scales: { x: { grid: { display: false }, ticks: { color: COL.texto, font: { size: 11 } }, border: { color: 'rgba(255,255,255,.12)' } },
+                y: { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 } }, border: { display: false } } } };
+    return Object.assign(o, extra || {});
+  }
+  function cursor(e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; }
+  function filtrarMes(k) { var fin = new Date(+k.slice(0, 4), +k.slice(5, 7), 0); F.desde = k + '-01'; F.hasta = k + '-' + String(fin.getDate()).padStart(2, '0'); el('tfDesde').value = F.desde; el('tfHasta').value = F.hasta; el('tfPeriodo').value = 'custom'; pagina = 0; dibujar(); }
+
+  function dibujarMes(d) {
+    var cfg;
+    if (vistaMes === 'flujo') {
+      var m = T.porMes(d.movs);
+      el('tSubMes').textContent = '· ingresos y egresos netos por mes';
+      cfg = { type: 'bar', data: { labels: m.map(function (x) { return mesTxt(x.mes); }), datasets: [
+          { label: 'Ingresos', data: m.map(function (x) { return x.ingresos; }), backgroundColor: COL.azul, borderRadius: 3, maxBarThickness: 16 },
+          { label: 'Egresos', data: m.map(function (x) { return x.egresos; }), backgroundColor: COL.naranja, borderRadius: 3, maxBarThickness: 16 }] },
+        options: opcionesBase({ onHover: cursor, onClick: function (e, act) { if (act.length) filtrarMes(m[act[0].index].mes); } }) };
+      cfg.options.plugins.legend = { display: true, position: 'top', align: 'end', labels: { color: COL.claro, boxWidth: 10, boxHeight: 10, font: { size: 11.5 } } };
+      cfg.options.plugins.tooltip.displayColors = true;
+      cfg.options.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ': ' + g$(c.raw); } };
+    } else {
+      var s = T.saldoMensual(CTAS, MOVS, F, F.desde || MIN, F.hasta || MAX);
+      el('tSubMes').textContent = '· saldo de las cuentas de fondo elegidas al cierre de cada mes';
+      cfg = { type: 'line', data: { labels: s.map(function (x) { return mesTxt(x.mes); }), datasets: [{ data: s.map(function (x) { return x.saldo; }), borderColor: COL.aqua, backgroundColor: COL.aqua, pointRadius: 2, borderWidth: 2, tension: 0 }] },
+        options: opcionesBase({ onHover: cursor, onClick: function (e, act) { if (act.length) filtrarMes(s[act[0].index].mes); } }) };
+      cfg.options.plugins.tooltip.callbacks = { label: function (c) { return g$(c.raw); } };
+    }
+    cfg.options.scales.y.ticks.callback = function (v) { return compacto(v); };
+    if (graf.mes) graf.mes.destroy();
+    graf.mes = new Chart(el('tChMes'), cfg);
+  }
+
+  function dibujarRank(d) {
+    var r = T.contrapartidas(d.movsCtr, lado, 10);
+    el('tAyudaRank').textContent = (lado === 'destino' ? 'A qué cuentas fue el dinero (proveedores, gastos, sueldos…).' : 'De qué cuentas vino el dinero (cobranzas de clientes, otros ingresos…).') + ' Clic en una barra: filtra esa cuenta.';
+    var cfg = { type: 'bar', data: { labels: r.map(function (x) { var s = String(x.nombre); return s.length > 28 ? s.slice(0, 27) + '…' : s; }),
+        datasets: [{ data: r.map(function (x) { return x.valor; }), backgroundColor: r.map(function (x) { return x.clave === null ? 'rgba(124,147,163,.5)' : (lado === 'destino' ? COL.naranja : COL.azul); }), borderRadius: 4, borderSkipped: false, maxBarThickness: 22 }] },
+      options: opcionesBase({ indexAxis: 'y', onHover: cursor, onClick: function (e, act) { if (!act.length) return; var x = r[act[0].index]; if (x.clave !== null) { F.grupo = null; el('tfGrupo').value = ''; ponerFiltro('cuenta', String(x.clave)); } } }) };
+    cfg.options.scales.x = { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } };
+    cfg.options.scales.y = { grid: { display: false }, ticks: { color: COL.claro, font: { size: 11.5 } }, border: { color: 'rgba(255,255,255,.12)' } };
+    cfg.options.plugins.tooltip.callbacks = { title: function (c) { return r[c[0].dataIndex].nombre; }, label: function (c) { return g$(c.raw); } };
+    if (graf.rank) graf.rank.destroy();
+    graf.rank = new Chart(el('tChRank'), cfg);
+  }
+
+  function vacia(tb, n) { if (!tb.children.length) { var tr = nuevo('tr'), td = nuevo('td', 'gris', 'Sin datos para estos filtros.'); td.colSpan = n; tr.appendChild(td); tb.appendChild(tr); } }
+
+  function dibujarTablas(d) {
+    var tb = el('tTablaCtas'); tb.innerHTML = '';
+    CTAS.filter(function (c) { return T.cuentaPasa(c, F) && (+c.movimientos > 0 || +c.saldo !== 0); }).sort(function (a, b) { return Math.abs(b.saldo) - Math.abs(a.saldo); }).forEach(function (c) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar esta cuenta';
+      tr.appendChild(nuevo('td', null, c.cuenta + (c.moneda_ext && c.saldo_moneda_ext != null ? ' · ' + fmtD.format(c.saldo_moneda_ext) + ' en moneda ext.' : '')));
+      tr.appendChild(nuevo('td', null, c.grupo));
+      tr.appendChild(nuevo('td', 'num' + (+c.saldo < 0 ? ' neg' : ''), g$(+c.saldo)));
+      var dif = Math.abs(+c.diferencia_ficha) >= 0.01, tf = nuevo('td', 'num', g$(+c.saldo_ficha) + (dif ? ' ⚠' : ''));
+      if (dif) { tf.title = 'La ficha de Tango difiere en ' + fmt$2.format(+c.diferencia_ficha) + ' de lo que dan los movimientos'; tf.style.color = 'var(--amber)'; }
+      tr.appendChild(tf);
+      tr.addEventListener('click', function () { F.grupo = null; el('tfGrupo').value = ''; ponerFiltro('cuenta', String(c.cod_cta)); });
+      tb.appendChild(tr);
+    }); vacia(tb, 4);
+    var tc = el('tTablaComp'); tc.innerHTML = '';
+    T.porComprobante(d.movs).forEach(function (x) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar';
+      tr.appendChild(nuevo('td', null, x.nombre + ' (' + x.clave + ')')); tr.appendChild(nuevo('td', 'num', fmtN.format(x.cantidad)));
+      tr.appendChild(nuevo('td', 'num', x.ingresos ? g$(x.ingresos) : '—')); tr.appendChild(nuevo('td', 'num', x.egresos ? g$(x.egresos) : '—'));
+      tr.addEventListener('click', function () { ponerFiltro('comp', x.clave); }); tc.appendChild(tr);
+    }); vacia(tc, 4);
+    var tq = el('tTablaCheq'); tq.innerHTML = '';
+    T.cheques(CHEQ).forEach(function (x) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Ver estos cheques';
+      tr.appendChild(nuevo('td', null, T.nombreCheq(x.clave))); tr.appendChild(nuevo('td', 'num', fmtN.format(x.cantidad))); tr.appendChild(nuevo('td', 'num', g$(x.importe)));
+      tr.addEventListener('click', function () { vista = 'cheq'; estadoCheq = x.clave; marcarTab('tTabsDet', el('tTabsDet').querySelector('[data-v="cheq"]')); pagina = 0; dibujarDetalle(datos()); });
+      tq.appendChild(tr);
+    }); vacia(tq, 3);
+  }
+
+  var estadoCheq = null;
+  var COLS = {
+    mov: [['fecha', 'Fecha'], ['comp', 'Comprobante'], ['cuenta', 'Cuenta'], ['leyenda', 'Leyenda'], ['tercero', 'Cliente / proveedor'], ['debe', 'Debe', 1], ['haber', 'Haber', 1]],
+    cheq: [['fecha_cheque', 'Fecha de pago'], ['n_cheque', 'Número'], ['banco', 'Banco'], ['cliente', 'Recibido de'], ['proveedor', 'Entregado a'], ['est', 'Estado'], ['importe', 'Importe', 1]]
+  };
+  function filasDetalle(d) {
+    if (vista === 'cheq') return CHEQ.filter(function (q) { return !estadoCheq || q.estado === estadoCheq; }).map(function (q) { var o = Object.assign({}, q); o.est = T.nombreCheq(q.estado); return o; });
+    return d.movs.map(function (m) { var o = Object.assign({}, m); o.comp = m.comprobante + ' ' + (m.n_comp || '') + (m.situacion !== 'N' ? ' · ' + T.SIT[m.situacion] : ''); o.tercero = m.cliente || m.proveedor || ''; return o; });
+  }
+
+  function dibujarDetalle(d) {
+    var cols = COLS[vista], cab = el('tCabDet'); cab.innerHTML = '';
+    cols.forEach(function (c) {
+      var th = nuevo('th', 'ord' + (c[2] ? ' num' : ''), c[1] + (orden.col === c[0] ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''));
+      th.addEventListener('click', function () { if (orden.col === c[0]) orden.dir = -orden.dir; else { orden.col = c[0]; orden.dir = c[2] ? -1 : 1; } dibujarDetalle(datos()); });
+      cab.appendChild(th);
+    });
+    var numerica = cols.some(function (c) { return c[0] === orden.col && c[2]; });
+    var filas = filasDetalle(d).sort(function (a, b) {
+      var x = a[orden.col], y = b[orden.col];
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      return (numerica ? (+x - +y) : String(x).localeCompare(String(y))) * orden.dir;
+    });
+    var paginas = Math.max(1, Math.ceil(filas.length / POR_PAG)); if (pagina >= paginas) pagina = paginas - 1;
+    var tb = el('tTablaDet'); tb.innerHTML = '';
+    filas.slice(pagina * POR_PAG, (pagina + 1) * POR_PAG).forEach(function (x) {
+      var tr = nuevo('tr');
+      if (vista === 'cheq') {
+        tr.appendChild(nuevo('td', null, fechaTxt(x.fecha_cheque))); tr.appendChild(nuevo('td', null, x.n_cheque || '—')); tr.appendChild(nuevo('td', null, x.banco));
+        tr.appendChild(nuevo('td', null, x.cliente || x.cod_client || '—')); tr.appendChild(nuevo('td', null, x.proveedor || x.cod_provee || '—'));
+        tr.appendChild(nuevo('td', null, x.est)); tr.appendChild(nuevo('td', 'num', g$(+x.importe)));
+      } else {
+        tr.appendChild(nuevo('td', null, fechaTxt(x.fecha))); tr.appendChild(nuevo('td', null, x.comp));
+        var tc = nuevo('td', 'clic', x.cuenta); tc.title = 'Filtrar esta cuenta'; tc.addEventListener('click', function () { F.grupo = null; el('tfGrupo').value = ''; ponerFiltro('cuenta', String(x.cod_cta)); }); tr.appendChild(tc);
+        tr.appendChild(nuevo('td', null, x.leyenda || '—')); tr.appendChild(nuevo('td', null, x.tercero || '—'));
+        tr.appendChild(nuevo('td', 'num', +x.debe ? g$(+x.debe) : '')); tr.appendChild(nuevo('td', 'num', +x.haber ? g$(+x.haber) : ''));
+      }
+      tb.appendChild(tr);
+    });
+    vacia(tb, cols.length);
+    el('tPagInfo').textContent = (vista === 'cheq' && estadoCheq ? 'Cheques: ' + T.nombreCheq(estadoCheq) + ' · ' : '') + (filas.length ? 'Mostrando ' + (pagina * POR_PAG + 1) + '–' + Math.min(filas.length, (pagina + 1) * POR_PAG) + ' de ' + fmtN.format(filas.length) + ' · página ' + (pagina + 1) + ' de ' + paginas : '');
+    el('tPagAnt').disabled = pagina === 0; el('tPagSig').disabled = pagina >= paginas - 1;
+  }
+
+  function descargarCsv() {
+    var filas = filasDetalle(datos());
+    var cab = vista === 'cheq' ? ['n_cheque', 'banco', 'importe', 'fecha_emision', 'fecha_cheque', 'fecha_recepcion', 'fecha_salida', 'estado', 'cod_client', 'cliente', 'cod_provee', 'proveedor']
+      : ['fecha', 'cod_comp', 'comprobante', 'n_comp', 'situacion', 'cod_cta', 'cuenta', 'grupo', 'debe', 'haber', 'leyenda', 'cod_client', 'cliente', 'cod_provee', 'proveedor'];
+    var esc = function (v) { v = v == null ? '' : String(v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var txt = cab.join(';') + '\n' + filas.map(function (x) { return cab.map(function (c) { return esc(x[c]); }).join(';'); }).join('\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + txt], { type: 'text/csv;charset=utf-8' }));
+    a.download = vista === 'cheq' ? 'tesoreria_cheques_empresa_ejemplo.csv' : 'tesoreria_movimientos_empresa_ejemplo.csv'; document.body.appendChild(a); a.click(); a.remove();
+  }
+})();
+</script>

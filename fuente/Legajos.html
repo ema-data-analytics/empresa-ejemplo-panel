@@ -1,0 +1,546 @@
+<!-- ============ MODULO LEGAJOS Y SUELDOS ============ -->
+<!-- Usa los estilos comunes de pantalla que define el módulo Ventas (y .kpis.s8 / .etq de Stock); acá solo van los propios. -->
+<!-- Datos sensibles: las funciones de la base solo devuelven datos a usuarios activos con rol super o admin. -->
+<style>
+  .l-aviso { font-size:12px; color:var(--amber); margin:0 0 12px; line-height:1.5; }
+  .l-nota { font-size:12px; color:var(--gray); margin:0 0 12px; line-height:1.5; }
+  .l-recibo-cab { display:flex; flex-wrap:wrap; gap:6px 22px; font-size:12.5px; color:var(--gray); margin:0 0 12px; }
+  .l-recibo-cab b { color:var(--off-white); font-weight:600; }
+  tr.l-sub td { font-weight:600; background:rgba(255,255,255,.03); }
+  #lPanelRecibo { scroll-margin-top:190px; }
+  .l-sel { background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--off-white); border-radius:6px; padding:4px 6px; font-size:12px; margin-left:6px; }
+</style>
+
+<section class="modulo" id="modLegajos">
+  <div class="filtros">
+    <div class="fila-filtros">
+      <div class="filtro"><label for="lfPeriodo">Período</label><select id="lfPeriodo"></select></div>
+      <div class="filtro"><label for="lfDesde">Desde (mes)</label><input type="month" id="lfDesde"></div>
+      <div class="filtro"><label for="lfHasta">Hasta (mes)</label><input type="month" id="lfHasta"></div>
+      <div class="filtro"><label for="lfTipo">Tipo de liquidación</label><select id="lfTipo"></select></div>
+      <div class="filtro"><label for="lfDepto">Departamento</label><select id="lfDepto"></select></div>
+      <div class="filtro"><label for="lfCategoria">Categoría</label><select id="lfCategoria"></select></div>
+      <div class="filtro"><label for="lfConvenio">Convenio</label><select id="lfConvenio"></select></div>
+      <div class="filtro"><label for="lfEstado">Estado</label>
+        <select id="lfEstado"><option value="">Todos</option><option value="activos">Solo activos</option><option value="egresados">Solo egresados</option></select></div>
+      <div class="filtro"><label for="lfLegajo">Legajo</label><select id="lfLegajo"></select></div>
+      <div class="filtro ancho"><label for="lfTexto">Buscar</label><input type="text" id="lfTexto" placeholder="Nombre, número de legajo, puesto…"></div>
+    </div>
+    <div class="chips" id="lChips"></div>
+  </div>
+
+  <div id="lMensaje" class="mensaje oculto"></div>
+  <div id="lCuerpo">
+    <div class="l-aviso">🔒 Datos sensibles: esta pantalla solo la ven los usuarios con rol super o admin. No se muestran CUIL, documento, domicilio, teléfono ni email.</div>
+    <div class="l-nota" id="lNota">Costo laboral = haberes + asignaciones + no remunerativos + contribuciones patronales (Tango no lo guarda: se calcula). Las contribuciones patronales Tango las liquida en recibos aparte, del tipo "Contribuciones".</div>
+    <div class="l-aviso" id="lAviso"></div>
+    <div class="kpis s8" id="lKpis"></div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3><span>Evolución mensual <span class="sub" id="lSubMes"></span></span>
+          <span class="tabs" id="lTabsMes"><button data-m="costo" class="on">Costo laboral</button><button data-m="neto">Neto y retenciones</button><button data-m="personas">Personas</button></span></h3>
+        <div class="lienzo"><canvas id="lChMes" aria-label="Evolución mensual de sueldos"></canvas></div>
+        <div class="ayuda">Clic en un mes: filtra ese mes.</div>
+      </div>
+      <div class="panel">
+        <h3><span>Ranking <span class="sub">top 10</span></span>
+          <span><span class="tabs" id="lTabsRank"><button data-d="legajo" class="on">Personas</button><button data-d="departamento">Departamentos</button><button data-d="categoria">Categorías</button><button data-d="concepto">Conceptos</button></span><select id="lRankMedida" class="l-sel" aria-label="Qué se mide"></select></span></h3>
+        <div class="lienzo alto"><canvas id="lChRank" aria-label="Ranking"></canvas></div>
+        <div class="ayuda" id="lAyudaRank"></div>
+      </div>
+    </div>
+
+    <div class="grilla-2">
+      <div class="panel">
+        <h3>Por tipo de liquidación <span class="sub">en el período</span></h3>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Tipo</th><th class="num">Recibos</th><th class="num">Personas</th><th class="num">Haberes</th><th class="num">Neto</th><th class="num">Costo laboral</th></tr></thead>
+          <tbody id="lTablaTipo"></tbody></table></div>
+      </div>
+      <div class="panel">
+        <h3>Altas y bajas por año <span class="sub">según la fecha de ingreso y de egreso</span></h3>
+        <div class="tabla-scroll" style="max-height:360px"><table>
+          <thead><tr><th>Año</th><th class="num">Ingresos</th><th class="num">Egresos</th><th class="num">Dotación a fin de año</th></tr></thead>
+          <tbody id="lTablaAltas"></tbody></table></div>
+        <div class="ayuda">Tango guarda el último ingreso de cada persona: si alguien reingresó, cuenta con su última fecha.</div>
+      </div>
+    </div>
+
+    <div class="panel oculto" id="lPanelRecibo">
+      <h3><span>Recibo <span class="sub" id="lSubRecibo"></span></span><button class="btn secundario chico" id="lCerrarRecibo">Cerrar</button></h3>
+      <div class="l-recibo-cab" id="lReciboCab"></div>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Concepto</th><th>Tipo</th><th class="num">Cantidad</th><th class="num">Valor</th><th class="num">Importe</th></tr></thead>
+        <tbody id="lTablaRecibo"></tbody></table></div>
+      <div class="ayuda" id="lControlRecibo"></div>
+    </div>
+
+    <div class="panel">
+      <h3><span>Detalle <span class="sub" id="lSubDet"></span></span>
+        <span><span class="tabs" id="lTabsDet"><button data-v="rec" class="on">Recibos</button><button data-v="leg">Legajos</button></span>
+        <button class="btn secundario chico" id="lBtnCsv">Descargar CSV</button></span></h3>
+      <div class="tabla-scroll"><table>
+        <thead><tr id="lCabDet"></tr></thead>
+        <tbody id="lTablaDet"></tbody></table></div>
+      <div class="pie-tabla"><span id="lPagInfo"></span>
+        <span><button class="btn secundario chico" id="lPagAnt">‹ Anterior</button> <button class="btn secundario chico" id="lPagSig">Siguiente ›</button></span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Lógica pura. legajos = api_legajos_v2; recibos = api_legajos_liquidaciones_v2; conceptos = api_legajos_conceptos_v2.
+  // Meses como texto 'AAAA-MM'. Tipo de liquidación 9 = Contribuciones patronales (recibo aparte, sin sueldo).
+  // ---------------------------------------------------------------------------
+  var L = window.LegajosLogica = {};
+  function r2(x) { return Math.round(x * 100) / 100; }
+  L.CONTRIB = 9;
+  L.SIN = 'Sin dato';
+  L.TIPO_CONCEPTO = { 1: 'Haberes', 2: 'Retenciones', 3: 'Asignaciones', 4: 'No remunerativos', 5: 'Ganancias', 6: 'Devolución de ganancias', 7: 'Redondeo', 8: 'Contribuciones patronales', 9: 'Auxiliares' };
+  L.val = function (x) { return x == null || x === '' ? L.SIN : x; };
+  L.indice = function (legajos) { var m = {}; legajos.forEach(function (g) { m[g.id_legajo] = g; }); return m; };
+
+  // conEstado = false: no aplica el filtro "activos/egresados" (para la dotación mes a mes y las altas y bajas).
+  L.legajoPasa = function (g, f, conEstado) {
+    if (!g) return !(f.depto || f.categoria || f.convenio || f.legajo || f.texto || (conEstado !== false && f.estado));
+    if (f.legajo && String(g.id_legajo) !== String(f.legajo)) return false;
+    if (f.depto && L.val(g.departamento) !== f.depto) return false;
+    if (f.categoria && L.val(g.categoria) !== f.categoria) return false;
+    if (f.convenio && L.val(g.convenio) !== f.convenio) return false;
+    if (conEstado !== false && f.estado === 'activos' && !g.activo) return false;
+    if (conEstado !== false && f.estado === 'egresados' && g.activo) return false;
+    var txt = (f.texto || '').trim().toLowerCase();
+    if (txt && [g.nombre, g.nro_legajo, g.puesto, g.categoria, g.departamento].join(' ').toLowerCase().indexOf(txt) < 0) return false;
+    return true;
+  };
+
+  L.filtrarRecibos = function (recibos, idx, f) {
+    return recibos.filter(function (r) {
+      var mes = r.periodo.slice(0, 7);
+      if (f.desde && mes < f.desde) return false;
+      if (f.hasta && mes > f.hasta) return false;
+      if (f.tipo && String(r.tipo_liquidacion) !== String(f.tipo)) return false;
+      return L.legajoPasa(idx[r.id_legajo], f);
+    });
+  };
+
+  function sumar(acc, r) {
+    acc.haberes += +r.haberes; acc.asignaciones += +r.asignaciones; acc.no_remunerativo += +r.no_remunerativo;
+    acc.retenciones += +r.retenciones; acc.ganancias += +r.ganancias; acc.neto += +r.neto; acc.contribuciones += +r.contribuciones; acc.costo += +r.costo_laboral;
+  }
+  function vacio() { return { haberes: 0, asignaciones: 0, no_remunerativo: 0, retenciones: 0, ganancias: 0, neto: 0, contribuciones: 0, costo: 0 }; }
+  function redondear(o) { ['haberes', 'asignaciones', 'no_remunerativo', 'retenciones', 'ganancias', 'neto', 'contribuciones', 'costo'].forEach(function (k) { o[k] = r2(o[k]); }); return o; }
+
+  L.kpis = function (legajos, recibos, f) {
+    var k = vacio(), pers = {}, persMes = {}, n = 0;
+    recibos.forEach(function (r) {
+      sumar(k, r);
+      if (+r.tipo_liquidacion !== L.CONTRIB) { n++; pers[r.id_legajo] = 1; persMes[r.id_legajo + '|' + r.periodo.slice(0, 7)] = 1; }
+    });
+    redondear(k);
+    k.recibos = n;
+    k.personas = Object.keys(pers).length;
+    k.personas_mes = Object.keys(persMes).length;
+    k.dotacion = legajos.filter(function (g) { return g.activo && L.legajoPasa(g, f); }).length;
+    k.costo_prom = k.personas_mes ? r2(k.costo / k.personas_mes) : null;
+    k.cargas_pct = k.haberes ? r2(k.contribuciones / k.haberes * 100) : null;
+    return k;
+  };
+
+  L.porMes = function (recibos) {
+    var m = {};
+    recibos.forEach(function (r) {
+      var q = r.periodo.slice(0, 7); if (!m[q]) { m[q] = vacio(); m[q].mes = q; m[q].p = {}; }
+      sumar(m[q], r); if (+r.tipo_liquidacion !== L.CONTRIB) m[q].p[r.id_legajo] = 1;
+    });
+    return Object.keys(m).sort().map(function (q) { var x = redondear(m[q]); x.personas = Object.keys(x.p).length; delete x.p; x.adicionales = r2(x.asignaciones + x.no_remunerativo); return x; });
+  };
+
+  function cierreMes(k) { var d = new Date(+k.slice(0, 4), +k.slice(5, 7), 0); return k + '-' + String(d.getDate()).padStart(2, '0'); }
+  L.cierreMes = cierreMes;
+  // Personas en la empresa al cierre de un día: ingresó antes o ese día y no egresó antes de ese día.
+  L.dotacionAl = function (legajos, f, fecha) {
+    return legajos.filter(function (g) { return L.legajoPasa(g, f, false) && g.fecha_ingreso && g.fecha_ingreso <= fecha && (!g.fecha_egreso || g.fecha_egreso >= fecha); }).length;
+  };
+  L.dotacionMensual = function (legajos, f, meses) { return meses.map(function (k) { return { mes: k, dotacion: L.dotacionAl(legajos, f, cierreMes(k)) }; }); };
+
+  // dim: legajo | departamento | categoria | convenio. medida: costo | neto | haberes.
+  L.ranking = function (recibos, idx, dim, medida, n) {
+    var g = {};
+    recibos.forEach(function (r) {
+      var p = idx[r.id_legajo], k, nom;
+      if (dim === 'legajo') { k = String(r.id_legajo); nom = p ? p.nombre + ' (' + p.nro_legajo + ')' : 'Legajo ' + r.id_legajo; }
+      else { k = L.val(p ? p[dim] : null); nom = k; }
+      if (!g[k]) g[k] = { clave: k, nombre: nom, valor: 0 };
+      g[k].valor += medida === 'costo' ? +r.costo_laboral : +r[medida];
+    });
+    var arr = Object.keys(g).map(function (k) { g[k].valor = r2(g[k].valor); return g[k]; }).filter(function (x) { return x.valor !== 0; }).sort(function (a, b) { return b.valor - a.valor; });
+    if (arr.length > n) { var resto = arr.slice(n).reduce(function (t, x) { return t + x.valor; }, 0), tot = arr.length; arr = arr.slice(0, n); arr.push({ clave: null, nombre: 'Otros (' + (tot - n) + ')', valor: r2(resto) }); }
+    return arr;
+  };
+
+  // Conceptos: respetan período y tipo de liquidación (los datos vienen sumados por mes, no por persona).
+  L.conceptos = function (conceptos, f, tipoConcepto, n) {
+    var g = {};
+    conceptos.forEach(function (c) {
+      var mes = String(c.periodo).slice(0, 7);
+      if (f.desde && mes < f.desde) return; if (f.hasta && mes > f.hasta) return;
+      if (f.tipo && String(c.tipo_liquidacion) !== String(f.tipo)) return;
+      if (tipoConcepto && String(c.tipo_concepto) !== String(tipoConcepto)) return;
+      var k = c.id_concepto; if (!g[k]) g[k] = { clave: k, nombre: c.nro_concepto + ' · ' + c.concepto, tipo: c.tipo_concepto, valor: 0 };
+      g[k].valor += +c.importe;
+    });
+    var arr = Object.keys(g).map(function (k) { g[k].valor = r2(g[k].valor); return g[k]; }).filter(function (x) { return x.valor !== 0; }).sort(function (a, b) { return Math.abs(b.valor) - Math.abs(a.valor); });
+    if (arr.length > n) { var resto = arr.slice(n).reduce(function (t, x) { return t + x.valor; }, 0), tot = arr.length; arr = arr.slice(0, n); arr.push({ clave: null, nombre: 'Otros (' + (tot - n) + ')', valor: r2(resto) }); }
+    return arr;
+  };
+
+  L.porTipo = function (recibos) {
+    var g = {};
+    recibos.forEach(function (r) {
+      var k = r.tipo_liquidacion; if (!g[k]) { g[k] = vacio(); g[k].clave = k; g[k].nombre = r.tipo; g[k].recibos = 0; g[k].p = {}; }
+      sumar(g[k], r); g[k].recibos++; g[k].p[r.id_legajo] = 1;
+    });
+    return Object.keys(g).map(function (k) { var x = redondear(g[k]); x.personas = Object.keys(x.p).length; delete x.p; return x; }).sort(function (a, b) { return b.costo - a.costo; });
+  };
+
+  L.altasBajas = function (legajos, f) {
+    var a = {};
+    legajos.forEach(function (g) {
+      if (!L.legajoPasa(g, f, false)) return;
+      if (g.fecha_ingreso) { var y = g.fecha_ingreso.slice(0, 4); if (!a[y]) a[y] = { anio: y, altas: 0, bajas: 0 }; a[y].altas++; }
+      if (g.fecha_egreso) { var z = g.fecha_egreso.slice(0, 4); if (!a[z]) a[z] = { anio: z, altas: 0, bajas: 0 }; a[z].bajas++; }
+    });
+    return Object.keys(a).sort().reverse().map(function (y) { a[y].dotacion = L.dotacionAl(legajos, f, y + '-12-31'); return a[y]; });
+  };
+
+  // Una fila por legajo que pasa los filtros, con lo liquidado en el período.
+  L.porLegajo = function (legajos, recibos, f) {
+    var s = {};
+    recibos.forEach(function (r) {
+      var k = r.id_legajo; if (!s[k]) { s[k] = vacio(); s[k].recibos = 0; s[k].ultimo = null; }
+      sumar(s[k], r); if (+r.tipo_liquidacion !== L.CONTRIB) { s[k].recibos++; if (!s[k].ultimo || r.periodo > s[k].ultimo) s[k].ultimo = r.periodo; }
+    });
+    return legajos.filter(function (g) { return L.legajoPasa(g, f); }).map(function (g) {
+      var x = s[g.id_legajo] ? redondear(s[g.id_legajo]) : Object.assign(vacio(), { recibos: 0, ultimo: null });
+      return Object.assign({}, g, { recibos: x.recibos, ultimo: x.ultimo ? x.ultimo.slice(0, 7) : null, haberes: x.haberes, neto: x.neto, costo: x.costo });
+    });
+  };
+
+  // Control de un recibo: suma de sus renglones por tipo de concepto; neto = haberes + asignaciones + no remunerativos - retenciones.
+  L.controlRecibo = function (renglones) {
+    var t = {}; renglones.forEach(function (x) { t[x.tipo_concepto] = (t[x.tipo_concepto] || 0) + +x.importe; });
+    var h = t[1] || 0, a = t[3] || 0, nr = (t[4] || 0) + (t[6] || 0) + (t[7] || 0), re = (t[2] || 0) + (t[5] || 0), co = t[8] || 0;
+    return { haberes: r2(h), asignaciones: r2(a), no_remunerativo: r2(nr), retenciones: r2(re), contribuciones: r2(co), neto: r2(h + a + nr - re) };
+  };
+
+  if (typeof window.document === 'undefined') return;
+
+  // ---------------------------------------------------------------------------
+  // Pantalla
+  // ---------------------------------------------------------------------------
+  var LEG = null, REC = null, CON = null, IDX = {}, F = {}, graf = {}, vistaMes = 'costo', dim = 'legajo', medida = 'costo', vista = 'rec', MIN = null, MAX = null;
+  var orden = { col: 'periodo', dir: -1 }, pagina = 0, POR_PAG = 25;
+  var COL = { azul: '#3987e5', naranja: '#d95926', aqua: '#199e70', rojo: '#e66767', grilla: 'rgba(255,255,255,0.07)', texto: '#7C93A3', claro: '#F2F5F3' };
+  var fmt$ = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
+  var fmt$2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 });
+  var fmtN = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+  var fmtD = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
+  function g$(x) { return x == null ? '—' : fmt$.format(x); }
+  function el(id) { return document.getElementById(id); }
+  function fechaTxt(s) { if (!s) return '—'; var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+  function mesTxt(k) { if (!k) return '—'; var n = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; return n[+k.slice(5, 7) - 1] + ' ' + k.slice(2, 4); }
+  function nuevo(tag, clase, texto) { var e = document.createElement(tag); if (clase) e.className = clase; if (texto != null) e.textContent = texto; return e; }
+  function compacto(v) { var a = Math.abs(v); if (a >= 1e6) return fmtD.format(v / 1e6) + ' M'; if (a >= 1e3) return fmtN.format(v / 1e3) + ' mil'; return fmtN.format(v); }
+
+  window.MODULOS = window.MODULOS || {};
+  window.MODULOS.Legajos = { titulo: 'Legajos y sueldos', cargar: cargar };
+
+  function cargar() {
+    if (LEG) { dibujar(); return; }
+    el('lCuerpo').classList.add('cargando-suave');
+    sb.rpc('seg_puede_ver_sueldos').then(function (p) {
+      if (p.error) throw p.error;
+      if (p.data !== true) { el('lCuerpo').classList.add('oculto'); aviso('lMensaje', 'Tu usuario no tiene permiso para ver legajos y sueldos. Solo los usuarios con rol super o admin pueden verlos.', 'info'); return null; }
+      return Promise.all([sb.rpc('api_legajos_v2'), sb.rpc('api_legajos_liquidaciones_v2', {}), sb.rpc('api_legajos_conceptos_v2', {})]);
+    }).then(function (rs) {
+      el('lCuerpo').classList.remove('cargando-suave');
+      if (!rs) return;
+      var err = rs.map(function (r) { return r.error; }).filter(Boolean)[0];
+      if (err) { aviso('lMensaje', 'No se pudo leer legajos: ' + textoError(err)); return; }
+      LEG = (rs[0].data || []).map(function (g) { ['fecha_ingreso', 'fecha_egreso'].forEach(function (k) { if (g[k]) g[k] = String(g[k]).slice(0, 10); }); return g; });
+      REC = (rs[1].data || []).map(function (r) { r.periodo = String(r.periodo).slice(0, 10); return r; });
+      CON = rs[2].data || [];
+      IDX = L.indice(LEG);
+      armarFiltros(); dibujar();
+    }).catch(function (e) { el('lCuerpo').classList.remove('cargando-suave'); aviso('lMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  var IDS = { desde: 'lfDesde', hasta: 'lfHasta', tipo: 'lfTipo', depto: 'lfDepto', categoria: 'lfCategoria', convenio: 'lfConvenio', estado: 'lfEstado', legajo: 'lfLegajo', texto: 'lfTexto' };
+  function opciones(sel, pares, todos) { sel.innerHTML = ''; sel.appendChild(new Option(todos, '')); pares.forEach(function (p) { sel.appendChild(new Option(p[1], p[0])); }); }
+  function distintos(campo) { var m = {}; LEG.forEach(function (g) { m[L.val(g[campo])] = 1; }); return Object.keys(m).sort().map(function (x) { return [x, x]; }); }
+
+  function armarFiltros() {
+    var meses = REC.map(function (r) { return r.periodo.slice(0, 7); }).sort(); MIN = meses[0]; MAX = meses[meses.length - 1];
+    el('lfDesde').min = el('lfHasta').min = MIN; el('lfDesde').max = el('lfHasta').max = MAX;
+    var anios = {}; meses.forEach(function (m) { anios[m.slice(0, 4)] = 1; });
+    var per = [['todo', 'Todo (' + mesTxt(MIN) + ' a ' + mesTxt(MAX) + ')'], ['12m', 'Últimos 12 meses con datos']];
+    Object.keys(anios).sort().reverse().forEach(function (a) { per.push(['a' + a, 'Año ' + a]); }); per.push(['custom', 'Personalizado']);
+    var sp = el('lfPeriodo'); sp.innerHTML = ''; per.forEach(function (p) { sp.appendChild(new Option(p[1], p[0])); });
+    var tipos = {}; REC.forEach(function (r) { tipos[r.tipo_liquidacion] = r.tipo; });
+    opciones(el('lfTipo'), Object.keys(tipos).sort(function (a, b) { return a - b; }).map(function (k) { return [k, tipos[k]]; }), 'Todos');
+    opciones(el('lfDepto'), distintos('departamento'), 'Todos');
+    opciones(el('lfCategoria'), distintos('categoria'), 'Todas');
+    opciones(el('lfConvenio'), distintos('convenio'), 'Todos');
+    opciones(el('lfLegajo'), LEG.map(function (g) { return [String(g.id_legajo), g.nombre + ' (' + g.nro_legajo + ')' + (g.activo ? '' : ' · egresado')]; }), 'Todos');
+
+    var sinRec = LEG.filter(function (g) { return !REC.some(function (r) { return r.id_legajo === g.id_legajo; }); });
+    el('lAviso').textContent = sinRec.length ? '⚠ ' + sinRec.length + ' de ' + LEG.length + ' legajos no tienen ningún recibo cargado (' + sinRec.map(function (g) { return g.nombre; }).join(', ') + '). Los recibos llegan hasta ' + mesTxt(MAX) + '.' : 'Los recibos llegan hasta ' + mesTxt(MAX) + '.';
+
+    sp.addEventListener('change', function () {
+      var v = sp.value, d = null, h = null;
+      if (v === '12m') { var x = new Date(+MAX.slice(0, 4), +MAX.slice(5, 7) - 12, 1); d = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0'); h = MAX; }
+      else if (v.charAt(0) === 'a') { d = v.slice(1) + '-01'; h = v.slice(1) + '-12'; }
+      else if (v === 'custom') { return; }
+      F.desde = d; F.hasta = h; el('lfDesde').value = d || ''; el('lfHasta').value = h || ''; pagina = 0; dibujar();
+    });
+    ['desde', 'hasta'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; el('lfPeriodo').value = 'custom'; pagina = 0; dibujar(); }); });
+    ['tipo', 'depto', 'categoria', 'convenio', 'estado', 'legajo'].forEach(function (k) { el(IDS[k]).addEventListener('change', function () { F[k] = el(IDS[k]).value || null; pagina = 0; dibujar(); }); });
+    var t = null; el('lfTexto').addEventListener('input', function () { clearTimeout(t); t = setTimeout(function () { F.texto = el('lfTexto').value; pagina = 0; dibujar(); }, 250); });
+    el('lTabsMes').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; vistaMes = b.dataset.m; marcarTab('lTabsMes', b); dibujarMes(datos()); });
+    el('lTabsRank').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; dim = b.dataset.d; medida = dim === 'concepto' ? '1' : 'costo'; marcarTab('lTabsRank', b); armarMedida(); dibujarRank(datos()); });
+    el('lRankMedida').addEventListener('change', function () { medida = el('lRankMedida').value; dibujarRank(datos()); });
+    el('lTabsDet').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; vista = b.dataset.v; orden = vista === 'rec' ? { col: 'periodo', dir: -1 } : { col: 'costo', dir: -1 }; pagina = 0; marcarTab('lTabsDet', b); dibujarDetalle(datos()); });
+    el('lPagAnt').addEventListener('click', function () { if (pagina > 0) { pagina--; dibujarDetalle(datos()); } });
+    el('lPagSig').addEventListener('click', function () { pagina++; dibujarDetalle(datos()); });
+    el('lBtnCsv').addEventListener('click', descargarCsv);
+    el('lCerrarRecibo').addEventListener('click', function () { el('lPanelRecibo').classList.add('oculto'); });
+    armarMedida();
+  }
+  function marcarTab(id, b) { el(id).querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); }); }
+  function armarMedida() {
+    var s = el('lRankMedida'); s.innerHTML = '';
+    var ops = dim === 'concepto' ? Object.keys(L.TIPO_CONCEPTO).map(function (k) { return [k, L.TIPO_CONCEPTO[k]]; }) : [['costo', 'Costo laboral'], ['neto', 'Neto pagado'], ['haberes', 'Haberes']];
+    ops.forEach(function (p) { s.appendChild(new Option(p[1], p[0])); }); s.value = medida;
+  }
+
+  function datos() { return { rec: L.filtrarRecibos(REC, IDX, F) }; }
+  function ponerFiltro(k, v) { F[k] = v; pagina = 0; if (IDS[k]) el(IDS[k]).value = v || ''; dibujar(); }
+  function filtrarMeses(d, h) { F.desde = d; F.hasta = h; el('lfDesde').value = d; el('lfHasta').value = h; el('lfPeriodo').value = 'custom'; pagina = 0; dibujar(); }
+
+  function dibujarChips() {
+    var c = el('lChips'); c.innerHTML = '';
+    var nombres = { desde: 'Desde', hasta: 'Hasta', tipo: 'Tipo', depto: 'Departamento', categoria: 'Categoría', convenio: 'Convenio', estado: 'Estado', legajo: 'Legajo', texto: 'Buscar' };
+    var hay = false;
+    Object.keys(nombres).forEach(function (k) {
+      if (!F[k]) return; hay = true;
+      var v = F[k], s = el(IDS[k]);
+      if (s.tagName === 'SELECT' && s.options[s.selectedIndex]) v = s.options[s.selectedIndex].text;
+      if (k === 'desde' || k === 'hasta') v = mesTxt(v);
+      var ch = nuevo('span', 'chip-f', nombres[k] + ': ' + v), x = nuevo('button', null, '×'); x.title = 'Quitar';
+      x.addEventListener('click', function () { F[k] = null; el(IDS[k]).value = ''; if (k === 'desde' || k === 'hasta') el('lfPeriodo').value = 'custom'; pagina = 0; dibujar(); });
+      ch.appendChild(x); c.appendChild(ch);
+    });
+    if (hay) { var lim = nuevo('button', 'btn secundario chico', 'Limpiar todo');
+      lim.addEventListener('click', function () { F = {}; Object.keys(IDS).forEach(function (k) { el(IDS[k]).value = ''; }); el('lfPeriodo').value = 'todo'; pagina = 0; dibujar(); }); c.appendChild(lim); }
+  }
+
+  function dibujar() {
+    var d = datos();
+    [dibujarChips, dibujarKpis, dibujarMes, dibujarRank, dibujarTablas, dibujarDetalle].forEach(function (fn) {
+      try { fn(d); } catch (e) { console.error(e); aviso('lMensaje', 'Una parte de la pantalla no se pudo dibujar: ' + e.message); }
+    });
+  }
+
+  function tarjeta(cont, et, val, nota, clase, alClic) {
+    var t = nuevo('div', 'kpi'); t.appendChild(nuevo('div', 'et', et)); t.appendChild(nuevo('div', 'val' + (clase ? ' ' + clase : ''), val));
+    if (nota) t.appendChild(nuevo('div', 'nota', nota));
+    if (alClic) { t.style.cursor = 'pointer'; t.addEventListener('click', alClic); }
+    cont.appendChild(t);
+  }
+
+  function dibujarKpis(d) {
+    var k = L.kpis(LEG, d.rec, F), c = el('lKpis'); c.innerHTML = '';
+    tarjeta(c, 'Dotación activa', fmtN.format(k.dotacion), 'personas en la empresa hoy', null, function () { ponerFiltro('estado', 'activos'); });
+    tarjeta(c, 'Personas liquidadas', fmtN.format(k.personas), fmtN.format(k.recibos) + ' recibos en el período');
+    tarjeta(c, 'Haberes (remunerativo)', g$(k.haberes), 'masa salarial sujeta a aportes');
+    tarjeta(c, 'Neto pagado', g$(k.neto), 'lo que cobraron las personas');
+    tarjeta(c, 'Retenciones', g$(k.retenciones), 'aportes del empleado' + (k.ganancias ? ' y ' + g$(k.ganancias) + ' de ganancias' : ''));
+    tarjeta(c, 'Contribuciones patronales', g$(k.contribuciones), F.tipo && +F.tipo !== L.CONTRIB ? 'no entran: Tango las liquida en recibos del tipo Contribuciones' : k.cargas_pct != null ? fmtD.format(k.cargas_pct) + ' % sobre los haberes' : null);
+    tarjeta(c, 'Costo laboral', g$(k.costo), 'haberes + asignaciones + no remunerativos + contribuciones');
+    tarjeta(c, 'Costo mensual por persona', g$(k.costo_prom), 'promedio sobre ' + fmtN.format(k.personas_mes) + ' meses-persona');
+    el('lSubDet').textContent = '· ' + fmtN.format(d.rec.length) + ' recibos';
+  }
+
+  function opcionesBase(extra) {
+    var o = { responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#09233A', borderColor: 'rgba(255,255,255,.12)', borderWidth: 1, titleColor: COL.texto, bodyColor: COL.claro, bodyFont: { weight: '600' }, padding: 10, displayColors: false } },
+      scales: { x: { grid: { display: false }, ticks: { color: COL.texto, font: { size: 11 } }, border: { color: 'rgba(255,255,255,.12)' } },
+                y: { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 } }, border: { display: false } } } };
+    return Object.assign(o, extra || {});
+  }
+  function cursor(e, act) { e.native.target.style.cursor = act.length ? 'pointer' : 'default'; }
+  function leyenda(cfg) { cfg.options.plugins.legend = { display: true, position: 'top', align: 'end', labels: { color: COL.claro, boxWidth: 10, boxHeight: 10, font: { size: 11.5 } } }; cfg.options.plugins.tooltip.displayColors = true; }
+
+  function dibujarMes(d) {
+    var m = L.porMes(d.rec), cfg, etiquetas = m.map(function (x) { return mesTxt(x.mes); });
+    var clic = { onHover: cursor, onClick: function (e, act) { if (act.length) { var k = m[act[0].index].mes; filtrarMeses(k, k); } } };
+    function barra(label, campo, color) { return { label: label, data: m.map(function (x) { return x[campo]; }), backgroundColor: color, borderRadius: 2, maxBarThickness: 18 }; }
+    if (vistaMes === 'costo') {
+      el('lSubMes').textContent = '· haberes, adicionales y contribuciones por mes';
+      cfg = { type: 'bar', data: { labels: etiquetas, datasets: [barra('Haberes', 'haberes', COL.azul), barra('Asignaciones y no remunerativos', 'adicionales', COL.aqua), barra('Contribuciones patronales', 'contribuciones', COL.naranja)] }, options: opcionesBase(clic) };
+      cfg.options.scales.x.stacked = true; cfg.options.scales.y.stacked = true;
+      leyenda(cfg); cfg.options.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ': ' + g$(c.raw); }, footer: function (c) { return 'Costo laboral: ' + g$(m[c[0].dataIndex].costo); } };
+    } else if (vistaMes === 'neto') {
+      el('lSubMes').textContent = '· neto cobrado y retenciones por mes';
+      cfg = { type: 'bar', data: { labels: etiquetas, datasets: [barra('Neto pagado', 'neto', COL.azul), barra('Retenciones', 'retenciones', COL.naranja)] }, options: opcionesBase(clic) };
+      leyenda(cfg); cfg.options.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ': ' + g$(c.raw); } };
+    } else {
+      var dot = L.dotacionMensual(LEG, F, m.map(function (x) { return x.mes; }));
+      el('lSubMes').textContent = '· personas con recibo y dotación al cierre de cada mes';
+      cfg = { type: 'line', data: { labels: etiquetas, datasets: [
+          { label: 'Personas liquidadas', data: m.map(function (x) { return x.personas; }), borderColor: COL.azul, backgroundColor: COL.azul, pointRadius: 2, borderWidth: 2, tension: 0 },
+          { label: 'Dotación (según ingresos y egresos)', data: dot.map(function (x) { return x.dotacion; }), borderColor: COL.aqua, backgroundColor: COL.aqua, pointRadius: 0, borderWidth: 2, borderDash: [5, 4], tension: 0 }] },
+        options: opcionesBase(clic) };
+      leyenda(cfg); cfg.options.plugins.tooltip.callbacks = { label: function (c) { return c.dataset.label + ': ' + fmtN.format(c.raw); } };
+    }
+    if (vistaMes !== 'personas') cfg.options.scales.y.ticks.callback = function (v) { return compacto(v); };
+    if (graf.mes) graf.mes.destroy();
+    graf.mes = new Chart(el('lChMes'), cfg);
+  }
+
+  function dibujarRank(d) {
+    var r, ayuda;
+    if (dim === 'concepto') {
+      r = L.conceptos(CON, F, medida, 10);
+      ayuda = 'Conceptos de ' + L.TIPO_CONCEPTO[medida].toLowerCase() + ' con más importe. Respeta el período y el tipo de liquidación; no se abre por persona ni departamento.';
+    } else {
+      r = L.ranking(d.rec, IDX, dim, medida, 10);
+      ayuda = 'Clic en una barra: filtra ' + (dim === 'legajo' ? 'esa persona.' : dim === 'departamento' ? 'ese departamento.' : 'esa categoría.');
+    }
+    el('lAyudaRank').textContent = ayuda;
+    var color = dim === 'concepto' ? COL.aqua : medida === 'neto' ? COL.azul : COL.naranja;
+    var cfg = { type: 'bar', data: { labels: r.map(function (x) { var s = String(x.nombre); return s.length > 30 ? s.slice(0, 29) + '…' : s; }),
+        datasets: [{ data: r.map(function (x) { return x.valor; }), backgroundColor: r.map(function (x) { return x.clave === null ? 'rgba(124,147,163,.5)' : color; }), borderRadius: 4, borderSkipped: false, maxBarThickness: 22 }] },
+      options: opcionesBase({ indexAxis: 'y', onHover: cursor, onClick: function (e, act) {
+        if (!act.length || dim === 'concepto') return; var x = r[act[0].index]; if (x.clave === null) return;
+        ponerFiltro(dim === 'legajo' ? 'legajo' : dim === 'departamento' ? 'depto' : 'categoria', String(x.clave)); } }) };
+    cfg.options.scales.x = { grid: { color: COL.grilla }, ticks: { color: COL.texto, font: { size: 11 }, callback: function (v) { return compacto(v); } }, border: { display: false } };
+    cfg.options.scales.y = { grid: { display: false }, ticks: { color: COL.claro, font: { size: 11.5 } }, border: { color: 'rgba(255,255,255,.12)' } };
+    cfg.options.plugins.tooltip.callbacks = { title: function (c) { return r[c[0].dataIndex].nombre; }, label: function (c) { return g$(c.raw); } };
+    if (graf.rank) graf.rank.destroy();
+    graf.rank = new Chart(el('lChRank'), cfg);
+  }
+
+  function vacia(tb, n) { if (!tb.children.length) { var tr = nuevo('tr'), td = nuevo('td', 'gris', 'Sin datos para estos filtros.'); td.colSpan = n; tr.appendChild(td); tb.appendChild(tr); } }
+
+  function dibujarTablas(d) {
+    var tt = el('lTablaTipo'); tt.innerHTML = '';
+    L.porTipo(d.rec).forEach(function (x) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para filtrar este tipo';
+      tr.appendChild(nuevo('td', null, x.nombre)); tr.appendChild(nuevo('td', 'num', fmtN.format(x.recibos))); tr.appendChild(nuevo('td', 'num', fmtN.format(x.personas)));
+      tr.appendChild(nuevo('td', 'num', x.haberes ? g$(x.haberes) : '—')); tr.appendChild(nuevo('td', 'num', x.neto ? g$(x.neto) : '—')); tr.appendChild(nuevo('td', 'num', g$(x.costo)));
+      tr.addEventListener('click', function () { ponerFiltro('tipo', String(x.clave)); }); tt.appendChild(tr);
+    }); vacia(tt, 6);
+    var ta = el('lTablaAltas'); ta.innerHTML = '';
+    L.altasBajas(LEG, F).forEach(function (x) {
+      var tr = nuevo('tr', 'clic'); tr.title = 'Clic para ver ese año';
+      tr.appendChild(nuevo('td', null, x.anio)); tr.appendChild(nuevo('td', 'num', x.altas ? fmtN.format(x.altas) : '—'));
+      tr.appendChild(nuevo('td', 'num' + (x.bajas ? ' neg' : ''), x.bajas ? fmtN.format(x.bajas) : '—')); tr.appendChild(nuevo('td', 'num', fmtN.format(x.dotacion)));
+      tr.addEventListener('click', function () { filtrarMeses(x.anio + '-01', x.anio + '-12'); if (el('lfPeriodo').querySelector('option[value="a' + x.anio + '"]')) el('lfPeriodo').value = 'a' + x.anio; });
+      ta.appendChild(tr);
+    }); vacia(ta, 4);
+  }
+
+  var COLS = {
+    rec: [['periodo', 'Período'], ['persona', 'Persona'], ['tipo', 'Tipo'], ['haberes', 'Haberes', 1], ['adicionales', 'Asig. y no rem.', 1], ['retenciones', 'Retenciones', 1], ['neto', 'Neto', 1], ['contribuciones', 'Contribuciones', 1]],
+    leg: [['nro_legajo', 'Legajo'], ['nombre', 'Nombre'], ['departamento', 'Departamento'], ['categoria', 'Categoría'], ['fecha_ingreso', 'Ingreso'], ['fecha_egreso', 'Egreso'], ['antiguedad_anios', 'Antig. (años)', 1], ['recibos', 'Recibos', 1], ['neto', 'Neto', 1], ['costo', 'Costo laboral', 1]]
+  };
+  function filasDetalle(d) {
+    if (vista === 'leg') return L.porLegajo(LEG, d.rec, F);
+    return d.rec.map(function (r) { var o = Object.assign({}, r), p = IDX[r.id_legajo]; o.persona = p ? p.nombre + ' (' + p.nro_legajo + ')' : 'Legajo ' + r.id_legajo; o.adicionales = r2(+r.asignaciones + +r.no_remunerativo); return o; });
+  }
+
+  function dibujarDetalle(d) {
+    var cols = COLS[vista], cab = el('lCabDet'); cab.innerHTML = '';
+    cols.forEach(function (c) {
+      var th = nuevo('th', 'ord' + (c[2] ? ' num' : ''), c[1] + (orden.col === c[0] ? (orden.dir > 0 ? ' ▲' : ' ▼') : ''));
+      th.addEventListener('click', function () { if (orden.col === c[0]) orden.dir = -orden.dir; else { orden.col = c[0]; orden.dir = c[2] ? -1 : 1; } dibujarDetalle(datos()); });
+      cab.appendChild(th);
+    });
+    var numerica = cols.some(function (c) { return c[0] === orden.col && c[2]; });
+    var filas = filasDetalle(d).sort(function (a, b) {
+      var x = a[orden.col], y = b[orden.col];
+      if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+      return (numerica ? (+x - +y) : String(x).localeCompare(String(y))) * orden.dir;
+    });
+    var paginas = Math.max(1, Math.ceil(filas.length / POR_PAG)); if (pagina >= paginas) pagina = paginas - 1;
+    var tb = el('lTablaDet'); tb.innerHTML = '';
+    filas.slice(pagina * POR_PAG, (pagina + 1) * POR_PAG).forEach(function (x) {
+      var tr = nuevo('tr', 'clic');
+      function mon(v) { return +v ? g$(+v) : '—'; }
+      if (vista === 'leg') {
+        tr.title = 'Clic para filtrar esta persona';
+        tr.appendChild(nuevo('td', null, x.nro_legajo)); tr.appendChild(nuevo('td', null, x.nombre + (x.activo ? '' : ' ')));
+        if (!x.activo) { var e = nuevo('span', 'etq rojo', 'egresado'); if (x.motivo_egreso) e.title = x.motivo_egreso; tr.lastChild.appendChild(e); }
+        tr.appendChild(nuevo('td', null, L.val(x.departamento))); tr.appendChild(nuevo('td', null, L.val(x.categoria)));
+        tr.appendChild(nuevo('td', null, fechaTxt(x.fecha_ingreso))); tr.appendChild(nuevo('td', null, fechaTxt(x.fecha_egreso)));
+        tr.appendChild(nuevo('td', 'num', x.antiguedad_anios == null ? '—' : fmtD.format(x.antiguedad_anios))); tr.appendChild(nuevo('td', 'num', fmtN.format(x.recibos)));
+        tr.appendChild(nuevo('td', 'num', mon(x.neto))); tr.appendChild(nuevo('td', 'num', mon(x.costo)));
+        tr.addEventListener('click', function () { ponerFiltro('legajo', String(x.id_legajo)); });
+      } else {
+        tr.title = 'Clic para ver el recibo';
+        tr.appendChild(nuevo('td', null, mesTxt(x.periodo.slice(0, 7)))); tr.appendChild(nuevo('td', null, x.persona)); tr.appendChild(nuevo('td', null, x.tipo));
+        tr.appendChild(nuevo('td', 'num', mon(x.haberes))); tr.appendChild(nuevo('td', 'num', mon(x.adicionales))); tr.appendChild(nuevo('td', 'num', mon(x.retenciones)));
+        tr.appendChild(nuevo('td', 'num', mon(x.neto))); tr.appendChild(nuevo('td', 'num', mon(x.contribuciones)));
+        tr.addEventListener('click', function () { verRecibo(x); });
+      }
+      tb.appendChild(tr);
+    });
+    vacia(tb, cols.length);
+    el('lPagInfo').textContent = filas.length ? 'Mostrando ' + (pagina * POR_PAG + 1) + '–' + Math.min(filas.length, (pagina + 1) * POR_PAG) + ' de ' + fmtN.format(filas.length) + ' · página ' + (pagina + 1) + ' de ' + paginas : '';
+    el('lPagAnt').disabled = pagina === 0; el('lPagSig').disabled = pagina >= paginas - 1;
+  }
+
+  function verRecibo(x) {
+    var p = el('lPanelRecibo'); p.classList.remove('oculto');
+    el('lSubRecibo').textContent = '· ' + x.persona + ' · ' + mesTxt(x.periodo.slice(0, 7)) + ' · ' + x.tipo;
+    var cab = el('lReciboCab'); cab.innerHTML = '';
+    [['Recibo N°', x.nro_recibo || '—'], ['Fecha de pago', fechaTxt(x.fecha_pago)], ['Haberes', g$(+x.haberes)], ['Neto', g$(+x.neto)], ['Contribuciones', g$(+x.contribuciones)]].forEach(function (c) {
+      var s = nuevo('span', null, c[0] + ': '); s.appendChild(nuevo('b', null, c[1])); cab.appendChild(s);
+    });
+    var tb = el('lTablaRecibo'); tb.innerHTML = '<tr><td colspan="5" class="gris">Cargando…</td></tr>'; el('lControlRecibo').textContent = '';
+    p.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    sb.rpc('api_legajos_recibo_v2', { p_id_tot_liquidacion: x.id_tot_liquidacion }).then(function (r) {
+      if (r.error) { tb.innerHTML = ''; aviso('lMensaje', 'No se pudo leer el recibo: ' + textoError(r.error)); return; }
+      var ren = r.data || []; tb.innerHTML = '';
+      var tipoAnt = null, sub = 0;
+      function cerrar() { if (tipoAnt == null) return; var tr = nuevo('tr', 'l-sub'); tr.appendChild(nuevo('td', null, 'Total ' + (L.TIPO_CONCEPTO[tipoAnt] || 'tipo ' + tipoAnt).toLowerCase())); tr.appendChild(nuevo('td')); tr.appendChild(nuevo('td')); tr.appendChild(nuevo('td')); tr.appendChild(nuevo('td', 'num', fmt$2.format(sub))); tb.appendChild(tr); }
+      ren.forEach(function (c) {
+        if (c.tipo_concepto !== tipoAnt) { cerrar(); tipoAnt = c.tipo_concepto; sub = 0; }
+        sub += +c.importe;
+        var tr = nuevo('tr'); tr.appendChild(nuevo('td', null, c.nro_concepto + ' · ' + c.concepto)); tr.appendChild(nuevo('td', null, c.tipo_concepto_nombre));
+        tr.appendChild(nuevo('td', 'num', +c.cantidad ? fmtD.format(+c.cantidad) : '')); tr.appendChild(nuevo('td', 'num', +c.valor ? fmt$2.format(+c.valor) : ''));
+        tr.appendChild(nuevo('td', 'num', fmt$2.format(+c.importe))); tb.appendChild(tr);
+      });
+      cerrar(); vacia(tb, 5);
+      var k = L.controlRecibo(ren), ok = Math.abs(k.neto - +x.neto) < 0.01;
+      el('lControlRecibo').textContent = +x.tipo_liquidacion === L.CONTRIB ? 'Recibo de contribuciones patronales: no tiene neto a cobrar. Suma de contribuciones: ' + fmt$2.format(k.contribuciones) + (Math.abs(k.contribuciones - +x.contribuciones) < 0.01 ? ' ✓ coincide con el total.' : ' ⚠ no coincide con el total del recibo (' + fmt$2.format(+x.contribuciones) + ').')
+        : 'Control: haberes ' + fmt$2.format(k.haberes) + ' + asignaciones ' + fmt$2.format(k.asignaciones) + ' + no remunerativos ' + fmt$2.format(k.no_remunerativo) + ' − retenciones ' + fmt$2.format(k.retenciones) + ' = ' + fmt$2.format(k.neto) + (ok ? ' ✓ coincide con el neto del recibo.' : ' ⚠ no coincide con el neto del recibo (' + fmt$2.format(+x.neto) + ').');
+    }).catch(function (e) { tb.innerHTML = ''; aviso('lMensaje', 'Error de conexión: ' + textoError(e)); });
+  }
+
+  function descargarCsv() {
+    var filas = filasDetalle(datos());
+    var cab = vista === 'leg' ? ['nro_legajo', 'nombre', 'sexo', 'edad', 'departamento', 'categoria', 'convenio', 'puesto', 'fecha_ingreso', 'fecha_egreso', 'motivo_egreso', 'antiguedad_anios', 'sueldo_ficha', 'recibos', 'haberes', 'neto', 'costo']
+      : ['periodo', 'persona', 'tipo', 'nro_recibo', 'fecha_pago', 'haberes', 'asignaciones', 'no_remunerativo', 'retenciones', 'ganancias', 'neto', 'contribuciones', 'costo_laboral'];
+    var esc = function (v) { v = v == null ? '' : String(v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var txt = cab.join(';') + '\n' + filas.map(function (x) { return cab.map(function (c) { return esc(x[c]); }).join(';'); }).join('\n');
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + txt], { type: 'text/csv;charset=utf-8' }));
+    a.download = vista === 'leg' ? 'legajos_empresa_ejemplo.csv' : 'recibos_sueldo_empresa_ejemplo.csv'; document.body.appendChild(a); a.click(); a.remove();
+  }
+})();
+</script>

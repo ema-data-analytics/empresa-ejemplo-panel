@@ -1,0 +1,61 @@
+        <!-- Seguridad (solo super): usuarios, roles y permisos, bitácora -->
+        <section class="modulo" id="modSeguridad">
+          <div class="seg-tabs" role="tablist">
+            <button class="seg-tab activo" type="button" data-segtab="Usuarios">Usuarios</button>
+            <button class="seg-tab" type="button" data-segtab="Roles">Roles y permisos</button>
+            <button class="seg-tab" type="button" data-segtab="Bitacora">Bitácora</button>
+          </div>
+
+          <div class="panel seg-panel" id="segUsuarios">
+            <h3>Usuarios <span class="seg-acciones"><button class="btn chico" id="btnNuevoUsuario" type="button">+ Nuevo usuario</button><button class="btn secundario chico" id="btnRecargarUsuarios" type="button">Actualizar</button></span></h3>
+            <div class="seg-barra">
+              <input type="search" id="segBuscarUsuario" class="crece" placeholder="Buscar por nombre o email…">
+              <select id="segFiltroRol"><option value="">Todos los roles</option></select>
+              <select id="segFiltroEstado"><option value="">Activos e inactivos</option><option value="1">Solo activos</option><option value="0">Solo inactivos</option></select>
+            </div>
+            <div class="tabla-scroll"><table>
+              <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Contraseña</th><th>Último ingreso</th><th></th></tr></thead>
+              <tbody id="tablaUsuarios"><tr><td colspan="7" class="gris">Cargando…</td></tr></tbody>
+            </table></div>
+            <div id="segMensaje" class="mensaje oculto"></div>
+          </div>
+
+          <div class="panel seg-panel oculto" id="segRoles">
+            <h3>Roles <span class="seg-acciones"><button class="btn chico" id="btnNuevoRol" type="button">+ Nuevo rol</button></span></h3>
+            <div class="tabla-scroll"><table>
+              <thead><tr><th>Rol</th><th>Código</th><th>Descripción</th><th>Usuarios</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="tablaRoles"><tr><td colspan="6" class="gris">Cargando…</td></tr></tbody>
+            </table></div>
+            <div id="rolesMensaje" class="mensaje oculto"></div>
+          </div>
+          <div class="panel seg-panel oculto" id="segPermisos">
+            <h3>Permisos por módulo</h3>
+            <div class="seg-barra"><label class="gris" for="segRolPermisos">Rol</label><select id="segRolPermisos"></select>
+              <span class="gris" style="font-size:12px">Cada cambio se guarda solo y queda en la bitácora. El rol super siempre tiene todo.</span></div>
+            <div class="tabla-scroll"><table class="seg-grilla">
+              <thead><tr><th>Módulo</th><th>Acceso</th><th>Cargar datos</th><th></th></tr></thead>
+              <tbody id="tablaPermisos"><tr><td colspan="4" class="gris">Elegí un rol.</td></tr></tbody>
+            </table></div>
+            <div class="gris" style="font-size:12px;margin-top:10px">
+              <b>No ve</b>: el módulo no aparece en el menú y la base no le devuelve datos. <b>Ve</b>: mira pantallas, sin descargar CSV ni Imprimir / PDF.
+              <b>Ve y exporta</b>: además descarga CSV e imprime o guarda en PDF. <b>Cargar datos</b>: solo Cobranzas (agregar seguimiento).
+              El Radar muestra números de varios módulos: un rol con Radar ve esos totales aunque no tenga el módulo.
+            </div>
+            <div id="permisosMensaje" class="mensaje oculto"></div>
+          </div>
+
+          <div class="panel seg-panel oculto" id="segBitacora">
+            <h3>Bitácora de seguridad <span class="seg-acciones"><button class="btn secundario chico seg-exporta" id="btnBitacoraCsv" type="button">Descargar CSV</button><button class="btn secundario chico" id="btnRecargarBitacora" type="button">Actualizar</button></span></h3>
+            <div class="seg-barra">
+              <input type="search" id="segBuscarBitacora" class="crece" placeholder="Buscar por usuario, acción o detalle…">
+              <select id="segFiltroAccion"><option value="">Todas las acciones</option></select>
+              <label class="gris" for="segBitDesde">Desde</label><input type="date" id="segBitDesde">
+              <label class="gris" for="segBitHasta">Hasta</label><input type="date" id="segBitHasta">
+            </div>
+            <div class="tabla-scroll"><table>
+              <thead><tr><th>Cuándo</th><th>Quién</th><th>Acción</th><th>Sobre</th><th>Detalle</th></tr></thead>
+              <tbody id="tablaBitacora"><tr><td colspan="5" class="gris">Cargando…</td></tr></tbody>
+            </table></div>
+            <div class="gris" id="bitacoraPie" style="font-size:12px;margin-top:8px"></div>
+          </div>
+        </section>

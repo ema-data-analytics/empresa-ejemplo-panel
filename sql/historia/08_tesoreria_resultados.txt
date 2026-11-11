@@ -1,0 +1,18 @@
+Pruebas Tesoreria - 26/09/2026 - base de prueba ushvdubzbpctctodujen (solo lectura, todo se deshace al final)
+E01 cuentas = filas de sba01 (68): 68 PASA
+E02 movimientos = filas de sba05 (579): 579 PASA
+E03 total debe = total haber (3081384.17 / 3081384.17) PASA
+E04 cada comprobante cierra (debe = haber); desbalanceados: 0 PASA
+E05 saldo de cada cuenta = saldo inicial + movimientos (0 diferencias): 0 PASA
+E06 cuentas donde el saldo guardado en la ficha de Tango no coincide con sus movimientos: 5 (2 CAJA MOSTRADOR -55456.93, 20 DEUDORES POR VENTAS 99964.33, 8 TARJETA MASTERCARD -8120.38, 9 TARJETA VISA -11105.33, 14 TARJETA VISA ELECTRON -3921.79) (informativo)
+E07 anulados y sus reversiones se cancelan en cada cuenta (0 cuentas con resto): 0 PASA
+E08 cheques en cartera (C) = saldo de la cuenta de valores a depositar (346165.89): 346165.89 PASA
+E09 cheques rechazados (R) = saldo de la cuenta de cheques rechazados (4822.28): 4822.28 PASA
+E10 cheques por estado: A:41 98380.01, C:24 346165.89, R:4 4822.28, X:1 175409.31 (sba14: 70) (informativo)
+E11 saldo por grupo de cuentas: Bancos:4 60903.94, Cajas y otros fondos:18 1801203.52, Contrapartidas:40 -2262401.95, Tarjetas:5 87386.60, Valores a depositar:1 346165.89 (informativo)
+E12 con usuario logueado (579 movimientos, 70 cheques): PASA
+E13 anonimo no puede ejecutar: PASA
+E14 filtro 2023 = sba05 2023 (351): 351 PASA
+E15 cuentas en moneda extranjera: CAJA (U$S) pesos 9941.83 / moneda ext 1776.66, SUELDOS A PAGAR pesos 16783.00 / moneda ext 16783.00 (informativo)
+E16 cuentas donde la funcion vieja da otro saldo (no sumaba el saldo inicial): 5 (informativo)
+Resultado: 11 de 11 PASA.

@@ -1,0 +1,28 @@
+PRUEBAS DEL RADAR (funciones api_radar_hoy_v2 y api_radar_mensual_v2) - 26/09/2026
+Base de prueba ushvdubzbpctctodujen. Solo lectura (la prueba termina con error a proposito para que no quede nada grabado).
+Cada cifra del Radar se compara contra la funcion del modulo que ya estaba probada.
+
+R01 disponibilidades = Tesoreria (2295659.95): 2295659.95 PASA
+R02 cheques en cartera = Tesoreria (346165.89, 24): 346165.89, 24 PASA
+R03 cajas + bancos + valores + tarjetas = disponibilidades: PASA
+R04 stock valorizado y negativos = Stock (192074258.88, 3): 192074258.88, 3 PASA
+R05 activo fijo residual y amortizado = Activo Fijo (106662.69, 69737.31): 106662.69, 69737.31 PASA
+R06 super ve sueldos; dotacion activa 27 (esperado 27), ultimo mes 2023-12-01: PASA
+R07 ventas sin CUIT 40 (esperado 40), AFIP 0: PASA
+R08 costo laboral total mensual = Legajos (328836948.42, esperado 328836948.42): 328836948.42 PASA
+R09 amortizacion total mensual = Activo Fijo (37737.31): 37737.31 PASA
+R10 IVA debito y credito = IVA (404013.09, 80061.65): 404013.09, 80061.65 PASA
+R11 ingresos - egresos del mes a mes = movimiento neto de fondos (2262401.95): 2262401.95 PASA
+R12 por año:  2013 costo 5832186.60 | 2014 costo 6897767.58 | 2015 costo 10701024.46 | 2016 costo 13375112.70 | 2017 costo 11814416.59 | 2018 costo 16335022.71 | 2019 costo 19024514.96 | 2020 costo - amort 12215.02 | 2021 costo 40619572.35 amort 12215.04 | 2022 costo 65227740.99 amort 12215.04 | 2023 costo 139009589.48 amort 1092.21
+R13 foto: disp 2295659.95 cajas 1801203.52 bancos 60903.94 valores 346165.89 tarjetas 87386.60 rechazados 4822.28/4 ficha 5 stock 192074258.88 unid 30549.80 bajo min 14 sin costo 4 af ult 2023-12-31
+R14 usuario sin permiso: no ve sueldos (dotacion vacia, meses con costo 0) y si ve el resto (disp 2295659.95): PASA
+R15 anonimo no puede ejecutar: PASA
+
+RESULTADO: 13 de 13 pruebas con PASA/FALLA pasan (R12 y R13 son datos informativos).
+
+LO QUE MUESTRA:
+- En 2020 NO hay ningun recibo de sueldo cargado (si hay de 2013 a 2019 y de 2021 a 2023). Falta esa liquidacion en los datos.
+- La amortizacion total (69737.31) = 32000 de carga inicial + 37737.31 calculada mes a mes. En el Estado de Resultados va solo la del periodo.
+- Sueldos y amortizaciones llegan hasta diciembre 2023; ventas, compras e IVA siguen hasta 2026.
+- 4 articulos con stock pero sin costo (no suman al valorizado). 5 cuentas con saldo distinto al de su ficha.
+- Instalacion: la primera version tenia un "drop function" (innecesario, la funcion es nueva); Supabase pidio confirmacion, se cancelo y se instalo sin el drop.

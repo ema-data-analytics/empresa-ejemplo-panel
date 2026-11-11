@@ -1,0 +1,18 @@
+Pruebas Stock - 26/09/2026 - base de prueba ushvdubzbpctctodujen (solo lectura, todo se deshace al final)
+S01 saldos = filas de sta19 (113): 113 PASA
+S02 unidades = suma de sta19 (30549.8): 30549.8 PASA
+S03 unidades por deposito = sta19 (0 diferencias): 0 PASA
+S04 cada saldo = suma de sus movimientos (0 diferencias en 113): 0 PASA
+S05 movimientos = filas de sta20 (629): 629, sin comprobante: 0 PASA
+S06 pares con movimientos y sin saldo: 23, de articulos que llevan stock: 0 PASA
+S07 costo de ultima compra = ultimo precio de la pantalla Compras (0 diferencias): 0 PASA
+S08 origen del costo vigente (articulos): ficha ultimo costo:37, ultima compra real:26, sin costo:4 (informativo)
+S09 articulos donde el costo vigente corregido difiere de la vista vieja: 2 (informativo)
+S10 valorizado: vigente 192074258.88 | ficha 239581367.01 | ppp 698656.86 (informativo)
+S11 con usuario logueado (113 saldos, 629 movimientos): PASA
+S12 anonimo no puede ejecutar: PASA
+S13 filtro 2023 = sta20 2023 (317): 317 PASA
+S14 saldos negativos: 3 | bajo minimo: 14 | sobre maximo: 38 (informativo)
+Resultado: 11 de 11 PASA.
+Los 23 pares articulo-deposito con movimientos y sin saldo son todos de articulos que en Tango no llevan stock
+(servicios, garantias, kits y algunos tornillos): suman 348.095 unidades de movimientos que no son stock.

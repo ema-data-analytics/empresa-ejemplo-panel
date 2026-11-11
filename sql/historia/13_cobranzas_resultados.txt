@@ -1,0 +1,24 @@
+Paso 6 · Cobranzas — pruebas contra la base de prueba (07/10/2026). 22 de 22 OK.
+ 1 OK  Cuotas devueltas = cuotas de Tango de comprobantes no anulados: 203
+ 2 OK  Pendiente de cuotas PEN (importe − aplicado a esa cuota), calculado aparte: 455.536,75
+ 3 OK  La función vieja api_cartera_por_cliente da menos (398.027,72): resta todo lo cobrado del comprobante a cada cuota
+ 4 OK  No hay dos cuotas del mismo comprobante con la misma fecha de vencimiento: 0
+ 5 OK  Todos los cobros de Tango quedan en alguna cuota: 2.807.134,73 = suma de gva07
+ 6 OK  Cobros sin fecha: 0
+ 7 OK  Suma de cobros fechados de cada cuota = su aplicado: 0 diferencias
+ 8 OK  Saldo por comprobantes = suma de saldos de las fichas: 60.826,77
+ 9 OK  Clientes con saldo distinto de la ficha: 020025 +100,00 y 020031 −100,00 (un crédito de 100 asignado a otro cliente en la ficha)
+10 OK  Clientes devueltos: 8 (7 fichas + ocasionales 000000)
+11 OK  Ventas por cliente y mes = vista de ventas: 2.273.491,99
+12 OK  Anónimo no puede leer cobranzas
+13 OK  Usuario logueado sí puede (el portero exige perfil activo)
+14 OK  La tabla de seguimiento no se lee directo (ni anónimo ni logueado)
+15 OK  Anónimo no puede agregar seguimiento
+16 OK  Sin usuario activo no se puede agregar: "No autorizado"
+17 OK  Comentario vacío se rechaza
+18 OK  Cliente inexistente se rechaza
+19 OK  Estado fuera de la lista se rechaza
+20 OK  Con usuario activo se agrega y se lee con quién lo cargó (dentro de un bloque que se deshace)
+21 OK  Después de la prueba la tabla de seguimiento quedó vacía (no quedó nada grabado)
+22 OK  Se encontró un usuario activo para simular
+Primera corrida: 17 de 17 visibles; las pruebas 17 a 20 se anotaban dentro del bloque que se deshace y se perdían. Se corrigió la prueba (no la función) y se volvió a correr.

@@ -1,0 +1,17 @@
+PRUEBAS ACTIVO FIJO - 26/09/2026 - base de prueba ushvdubzbpctctodujen (solo lectura, todo se deshizo)
+A01 bienes = filas de bien (5): 5 PASA
+A02 movimientos = renglones de comprobantes de activo fijo (174): 174 PASA
+A03 saldo de cada bien = suma de sus movimientos (origen, mejoras, revaluos, amortizacion; 0 diferencias): 0 PASA
+A04 totales = saldo_bien (origen 175100.00, amortizacion 69737.31): 175100.00, 69737.31 PASA
+A05 valor residual = origen + mejoras + revaluos - amortizacion (0 diferencias): 0 PASA
+A06 bienes amortizados de mas (residual negativo): 0 PASA
+A07 filtro 2023 = renglones 2023 (25): 25 PASA
+A08 con usuario logueado (5 bienes, 174 movimientos): PASA
+A09 anonimo no puede ejecutar: PASA
+A10 comprobantes por tipo: DEPRECIACION DE BIENES:48, ACTIVACION DE BIENES:3, Carga de saldos iniciales de bienes:2, Mejora de bienes:1, Revaluo - Rdo por Tenencia:1, Transferencia de bienes:1
+A11 bienes: BU0001 Escritorio origen 1200.00 amort 477.21 residual 722.79 (39.8%) vida 10 Años ult 2023-11-30 | BU0004 Camioneta origen 51000.00 amort 45500.10 residual 5499.90 (89.2%) vida 60 Meses ult 2022-12-31 | BU0005 Edificio Casa Central origen 120000.00 amort 19760.00 residual 100240.00 (16.5%) vida 50 Años ult 2022-12-31 | BU0006 Monitor plano origen 900.00 amort 825.00 residual 75.00 (91.7%) vida 4 Años ult 2023-12-31 | BU0007 Aire acondicionado origen 3300.00 amort 3175.00 residual 125.00 (96.2%) vida 4 Años ult 2023-12-31
+A12 amortizacion por año y bien: Aire acondicionado 2020 925.00, 2021 750.00, 2022 750.00, 2023 750.00 | Camioneta 2020 9100.02, 2021 9200.04, 2022 9200.04 | Edificio Casa Central 2020 1920.00, 2021 1920.00, 2022 1920.00 | Escritorio 2020 120.00, 2021 120.00, 2022 120.00, 2023 117.21 | Monitor plano 2020 150.00, 2021 225.00, 2022 225.00, 2023 225.00
+A13 amortizacion del edificio en 2023: ninguna
+Resumen: 9 de 9 pruebas PASAN. A10 a A13 son informativas.
+Hallazgos: la ultima amortizacion calculada en Tango es de diciembre de 2023 (2024 a 2026 sin calcular). El Edificio no tiene amortizacion en 2023
+(2020-2022: 1.920 por año). El Escritorio se amortizo hasta noviembre de 2023. La Camioneta termino su vida util (60 meses desde 2018) en dic-2022.
